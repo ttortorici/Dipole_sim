@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33403.182
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "19-dipole", "19-dipole\19-dipole.vcxproj", "{BD2B82DC-803C-4697-A453-E2C3EFCA4141}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Debug|x64.ActiveCfg = Debug|x64
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Debug|x64.Build.0 = Debug|x64
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Debug|x86.ActiveCfg = Debug|Win32
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Debug|x86.Build.0 = Debug|Win32
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Release|x64.ActiveCfg = Release|x64
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Release|x64.Build.0 = Release|x64
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Release|x86.ActiveCfg = Release|Win32
+		{BD2B82DC-803C-4697-A453-E2C3EFCA4141}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {38AC1E2C-7F0B-4C8A-B1EA-456F5D09A8D9}
+	EndGlobalSection
+EndGlobal
