@@ -210,13 +210,13 @@ class DipoleSim:
 
 if __name__ == "__main__":
     # sim = DipoleSim(1.1, 30, 30, 45, np.array([0, 0]), 0.08789, 0, 1.5)
-    p = np.loadtxt('dipoles_35K_field_5000000steps.txt')
-    sim = DipoleSim(1.1, 30, 30, 100, np.array([0, 0]), 0.08789, 0, 1.5, p)
+    p = np.loadtxt('dipoles_300K_ferro_5000000.txt')
+    sim = DipoleSim(1.1, 30, 30, 300, np.array([0, 10]), 0.08789, 0, 1.5, p)
     # sim.save_img()
     for ii in range(1):
         for _ in range(5000000):
-            sim.step_internal()
-            # sim.step()
+            # sim.step_internal()
+            sim.step()
         sim.save_img()
         print(ii)
-    np.savetxt('dipoles_100K_ferro_5000000.txt', sim.p)
+    np.savetxt('dipoles_300K_field_5000000.txt', sim.p)

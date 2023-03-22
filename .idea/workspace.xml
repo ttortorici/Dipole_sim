@@ -5,6 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0fc894f0-685a-4e6d-ac20-785154d74f5a" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/plots_100K_boundary/0.png" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/montecarlo.py" beforeDir="false" afterPath="$PROJECT_DIR$/montecarlo.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/plots/0.png" beforeDir="false" />
