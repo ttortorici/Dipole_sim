@@ -104,6 +104,49 @@ def tpp_blade_voltage(angle, x, y, X, Y):
     return voltage_dipole(q, d, angle, X, Y, x, y)
 
 
+def field_due_to_charge(q, charge_x, charge_y, X, Y):
+    del_x, del_y = np.meshgrid(X - charge_x, Y - charge_y)
+    r_cubed = (del_x ** 2 + del_y ** 2) ** 1.5
+
+    e_field_x = k * q * del_x / r_cubed
+    e_field_y = k * q * del_x / r_cubed
+
+
+def tpp(angle_offset, loc_x, loc_y, X, Y):
+    # angle1 = angle_offset + 11. * np.pi / 180.
+    angle1 = 0.
+    angle2 = angle1 + 2.0943951023931953  # 60 degrees
+    angle3 = angle2 + 2.0943951023931953  # 60 degrees
+
+    angle1_x = np.cos(angle1)
+    angle1_y = np.sin(angle1)
+    angle2_x = np.cos(angle2)
+    angle2_y = np.sin(angle2)
+    angle3_x = np.cos(angle3)
+    angle3_y = np.sin(angle3)
+
+    oxy_dist = 2.73
+    phen_dist = 6.385
+
+    q = np.array([3, -2, -2, -2, 1, 1, 1])
+    x = np.array([0, oxy_dist * np.cos(angle1), oxy_dist * np.cos(angle2), oxy_dist * np.cos(angle3),
+                  phen_dist * np.cos(angle1), phen_dist * np.cos(angle2), phen_dist * np.cos(angle3)]) + loc_x
+    y = np.array([0, oxy_dist * np.sin(angle1), oxy_dist * np.sin(angle2), oxy_dist * np.sin(angle3),
+                  phen_dist * np.sin(angle1), phen_dist * np.sin(angle2), phen_dist * np.sin(angle3)]) + loc_y
+
+    # X, Y = np.meshgrid(X, Y)
+    xij = np.add(-np.array([[x]]).transpose(), X)
+    yij = np.add(-np.array([[y]]).transpose(), Y)
+    rij_sq = xij ** 2 + yij ** 2
+
+    qt = np.array([[q]]).transpose()
+    e_x = xij / rij_sq * qt
+    e_y = yij / rij_sq * qt
+
+
+    return e_field_x, e_field_y
+
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt

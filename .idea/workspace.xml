@@ -5,10 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0fc894f0-685a-4e6d-ac20-785154d74f5a" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/TPP_blades.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/montecarlo2.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/polarization_in_sphere_calc.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/montecarlo.py" beforeDir="false" afterPath="$PROJECT_DIR$/montecarlo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TPP_blades.py" beforeDir="false" afterPath="$PROJECT_DIR$/TPP_blades.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
