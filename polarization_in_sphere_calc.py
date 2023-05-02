@@ -23,9 +23,8 @@ def E(r_dipoles, p=1.):
     zhat[:, 2] = np.ones(len(r_dipoles))
     return p * np.sum((3 * z * r_dipoles - r_sq * zhat), axis=0)
 
-def gen_square_dipoles():
-    a = 1.
-    R = 100.
+
+def gen_square_dipoles(a, R):
     n = int(R/a)
     N = int(4./3. * np.pi * n ** 3)
     a2 = a ** 2
@@ -46,10 +45,9 @@ def gen_square_dipoles():
 if __name__ == "__main__":
     # import matplotlib.pyplot as plt
     # plt.figure(0)
-    r_d = gen_square_dipoles()
+    a = 1.
+    R = 250.
+    r_d = gen_square_dipoles(a, R)
     # plt.plot(r_d[:, 0], r_d[:, 1], marker="o")
-    print(E_x(r_d))
-    print(E_y(r_d))
-    print(E_z(r_d))
     print(E(r_d))
-    # plt.show()
+    # plt.show()2
