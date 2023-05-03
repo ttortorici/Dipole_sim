@@ -24,7 +24,14 @@ def E(r_dipoles, p=1.):
     return p * np.sum((3 * z * r_dipoles - r_sq * zhat), axis=0)
 
 
-def gen_square_dipoles(a, R):
+def gen_square_dipoles(a: float, R: float) -> np.ndarray:
+    """
+    generates an array of dipoles inside a sphere of radius R:
+    rows are each dipole and columns are x, y, z such that x^2+y^2+z^2=r^2 where r is location of dipole
+    :param a: distance between dipoles
+    :param R: radius of sphere
+    :return: array of dipoles
+    """
     n = int(R/a)
     N = int(4./3. * np.pi * n ** 3)
     a2 = a ** 2
@@ -42,12 +49,44 @@ def gen_square_dipoles(a, R):
     return r_dipoles[~np.all(r_dipoles == 0, axis=1)]
 
 
+def gen_stacked_triangle_dipoles(a: float, c: float, R: float) -> np.ndarray:
+    """
+
+    :param a: honeycomb constant
+    :param c: layer constant
+    :param R: radius of sphere
+    :return:
+    """
+    n = int(R / a)
+    N = int(4. / 3. * np.pi * n ** 3)
+    R_sq = R ** 2
+    ii = 0
+    v1 = np.array([c, 0., 0.])
+    v2 = np.array([0., 0., a])
+    v3 = np.array([0., np.sqrt(3.)*a/2., a/2.])
+    r_dipoles = np.zeros((N*2, 3))
+    for nn in range(-n*2, n*2):
+        for mm in range(-n*2, n*2):
+            for ll in range(-n*2, n*2):
+                r_vec = nn * v1 + mm * v2 + ll * v3
+                length_sq = np.sum(r_vec ** 2)
+                if 0. < length_sq <= R_sq:
+                    # print(length)
+                    r_dipoles[ii, :] = r_vec
+                    ii += 1
+    return r_dipoles[~np.all(r_dipoles == 0, axis=1)]
+
+
 if __name__ == "__main__":
-    # import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
     # plt.figure(0)
+    ax = plt.figure().add_subplot(projection='3d')
+
     a = 1.
-    R = 250.
-    r_d = gen_square_dipoles(a, R)
+    R = 15.
+    # r_d = gen_square_dipoles(a, R)
+    r_d = gen_stacked_triangle_dipoles(a, a, R)
     # plt.plot(r_d[:, 0], r_d[:, 1], marker="o")
+    ax.scatter(r_d[:, 0], r_d[:, 1], r_d[:, 2], marker="o")
     print(E(r_d))
-    # plt.show()2
+    plt.show()
