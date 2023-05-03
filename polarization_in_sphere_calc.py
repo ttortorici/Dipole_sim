@@ -77,16 +77,76 @@ def gen_stacked_triangle_dipoles(a: float, c: float, R: float) -> np.ndarray:
     return r_dipoles[~np.all(r_dipoles == 0, axis=1)]
 
 
+def gen_stacked_triangle_dipoles2(a: float, c: float, R: float) -> np.ndarray:
+    """
+
+    :param a: honeycomb constant
+    :param c: layer constant
+    :param R: radius of sphere
+    :return:
+    """
+    n = int(R / a)
+    N = int(4. / 3. * np.pi * n ** 3)
+    R_sq = R ** 2
+    ii = 0
+    v1 = np.array([c, 0., 0.])
+    v2 = np.array([0., a, 0.])
+    v3 = np.array([0., a/2., np.sqrt(3.)*a/2.])
+    r_dipoles = np.zeros((N*2, 3))
+    for nn in range(-n*2, n*2):
+        for mm in range(-n*2, n*2):
+            for ll in range(-n*2, n*2):
+                r_vec = nn * v1 + mm * v2 + ll * v3
+                length_sq = np.sum(r_vec ** 2)
+                if 0. < length_sq <= R_sq:
+                    # print(length)
+                    r_dipoles[ii, :] = r_vec
+                    ii += 1
+    return r_dipoles[~np.all(r_dipoles == 0, axis=1)]
+
+
+def gen_stacked_triangle_dipoles3(a: float, c: float, R: float) -> np.ndarray:
+    """
+
+    :param a: honeycomb constant
+    :param c: layer constant
+    :param R: radius of sphere
+    :return:
+    """
+    n = int(R / a)
+    N = int(4. / 3. * np.pi * n ** 3)
+    R_sq = R ** 2
+    ii = 0
+    v1 = np.array([0., 0., c])
+    v2 = np.array([a, 0., 0.])
+    v3 = np.array([a/2., np.sqrt(3.)*a/2., 0.])
+    r_dipoles = np.zeros((N*2, 3))
+    for nn in range(-n*2, n*2):
+        for mm in range(-n*2, n*2):
+            for ll in range(-n*2, n*2):
+                r_vec = nn * v1 + mm * v2 + ll * v3
+                length_sq = np.sum(r_vec ** 2)
+                if 0. < length_sq <= R_sq:
+                    # print(length)
+                    r_dipoles[ii, :] = r_vec
+                    ii += 1
+    return r_dipoles[~np.all(r_dipoles == 0, axis=1)]
+
+
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+    # import matplotlib.pyplot as plt
     # plt.figure(0)
-    ax = plt.figure().add_subplot(projection='3d')
+    # ax = plt.figure().add_subplot(projection='3d')
 
     a = 1.
     R = 15.
     # r_d = gen_square_dipoles(a, R)
     r_d = gen_stacked_triangle_dipoles(a, a, R)
     # plt.plot(r_d[:, 0], r_d[:, 1], marker="o")
-    ax.scatter(r_d[:, 0], r_d[:, 1], r_d[:, 2], marker="o")
+    # ax.scatter(r_d[:, 0], r_d[:, 1], r_d[:, 2], marker="o")
     print(E(r_d))
-    plt.show()
+    # plt.show()
+    r_d = gen_stacked_triangle_dipoles2(a, a, R)
+    print(E(r_d))
+    r_d = gen_stacked_triangle_dipoles3(a, a, R)
+    print(E(r_d))
