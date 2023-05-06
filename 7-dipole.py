@@ -1,6 +1,7 @@
 import numpy as np
 import itertools
 
+
 a = 1.1  # nm
 dipole_strength = 0.08789  # electron charge - nm
 eps_rel = 1.5
@@ -53,6 +54,7 @@ def calculate_energy_vec(electric_field):
 
 if __name__ == "__main__":
     import matplotlib.pylab as plt
+    from time import perf_counter
 
     pts = 1000
 
@@ -61,7 +63,9 @@ if __name__ == "__main__":
     betas = 1 / (temperatures * boltzmann)
     E = np.array([0, 0])
 
+    start = perf_counter()
     U_vec = calculate_energy_vec(E)
+    print(perf_counter()-start)
     average_energy = np.zeros(pts)
 
     for ii, b in enumerate(betas):
