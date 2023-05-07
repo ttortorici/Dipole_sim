@@ -17,7 +17,6 @@ k_un = 0.25 / (np.pi * eps0 * eps_rel)
 # ey = np.array([1, -0.5, -0.5]) * dipole_strength
 
 
-# @nb.njit(nb.float32[:])
 def gen_dipoles(nx, ny):
     sqrt3half = np.sqrt(3) * 0.5
     n = nx * ny
@@ -97,6 +96,8 @@ if __name__ == "__main__":
     from time import perf_counter
     import matplotlib.pylab as plt
 
+    start = perf_counter()
+
     pts = 1000
 
     temperatures = np.linspace(0, 100000, pts)
@@ -104,18 +105,18 @@ if __name__ == "__main__":
     betas = 1 / (temperatures * boltzmann)
     E = np.array([0, 0])
 
-    start = perf_counter()
     width = 4
     height = 4
     directions = 2
     U_vec = calculate_energy_vec(E, width, height, directions)
-    print(perf_counter() - start)
 
     average_energy = calc_ave_energy(betas, U_vec)
     # average_polarization = z_inv * np.sum(np.transpose(polarization_vec) * z_vec, 1)
 
+    print(perf_counter() - start)
     plt.plot(temperatures, average_energy)
     plt.xlabel("Temperature (K)")
     plt.ylabel("Average Energy (eV)")
     plt.show()
+
 

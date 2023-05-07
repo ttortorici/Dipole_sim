@@ -2,6 +2,25 @@
 //
 
 #include <iostream>
+#include <cmath>
+#include <vector>
+
+double a = 1.1;  // nm
+double dipole_strength = 0.08789;  // electron charge - nm
+double eps_rel = 1.5;
+
+double eps0 = 0.0552713;        // (electron charge) ^ 2 / (eV - nm)
+double boltzmann = 8.617e-5;    // eV / K
+double pi = 3.1415926535897932384626433832795028841971693993751058209749445923;
+
+double k_un = 0.25 / (pi * eps0 * eps_rel);
+
+struct {
+    std::vector<double> x;
+    std::vector<double> y;
+} double_vector;
+
+double_vector 
 
 int main()
 {

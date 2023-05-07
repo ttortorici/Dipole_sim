@@ -5,7 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0fc894f0-685a-4e6d-ac20-785154d74f5a" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/N-dipoles-2.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/19-dipole/.vs/19-dipole/v17/Browse.VC.db" beforeDir="false" afterPath="$PROJECT_DIR$/19-dipole/.vs/19-dipole/v17/Browse.VC.db" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/N-dipole.py" beforeDir="false" afterPath="$PROJECT_DIR$/N-dipole.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -67,9 +69,9 @@
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
-      <option name="SDK_HOME" value="C:\Users\etcto\AppData\Local\Programs\Python\Python310\python.exe" />
+      <option name="SDK_HOME" value="" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="false" />
+      <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/N-dipole.py" />
