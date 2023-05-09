@@ -105,10 +105,11 @@ if __name__ == "__main__":
     betas = 1 / (temperatures * boltzmann)
     E = np.array([0, 0])
 
-    width = 4
-    height = 4
-    directions = 2
+    width = 3
+    height = 3
+    directions = 3
     U_vec = calculate_energy_vec(E, width, height, directions)
+    print(U_vec)
 
     average_energy = calc_ave_energy(betas, U_vec)
     # average_polarization = z_inv * np.sum(np.transpose(polarization_vec) * z_vec, 1)
