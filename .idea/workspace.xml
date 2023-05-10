@@ -5,10 +5,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0fc894f0-685a-4e6d-ac20-785154d74f5a" name="Changes" comment="">
+<<<<<<< Updated upstream
       <change afterPath="$PROJECT_DIR$/9-dipole.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/7-dipole.py" beforeDir="false" afterPath="$PROJECT_DIR$/7-dipole.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/N-dipole.py" beforeDir="false" afterPath="$PROJECT_DIR$/N-dipole.py" afterDir="false" />
+=======
+      <change afterPath="$PROJECT_DIR$/montecarlo3.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/test.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/montecarlo2.py" beforeDir="false" afterPath="$PROJECT_DIR$/montecarlo2.py" afterDir="false" />
+>>>>>>> Stashed changes
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,7 +47,11 @@
     &quot;last_opened_file_path&quot;: &quot;D:/GitHub/Dipole_sim&quot;
   }
 }</component>
+<<<<<<< Updated upstream
   <component name="RunManager" selected="Python.9-dipole">
+=======
+  <component name="RunManager" selected="Python.montecarlo3">
+>>>>>>> Stashed changes
     <configuration name="7-dipole" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="Dipole_sim" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -104,19 +115,23 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="TPP_blades" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+    <configuration name="montecarlo3" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="Dipole_sim" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
-      <option name="SDK_HOME" value="" />
+      <option name="SDK_HOME" value="C:\Users\etcto\AppData\Local\Programs\Python\Python310\python.exe" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
+      <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
+<<<<<<< Updated upstream
       <option name="SCRIPT_NAME" value="C:\Users\Teddy\Documents\GitHub\Dipole_sim\TPP_blades.py" />
+=======
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/montecarlo3.py" />
+>>>>>>> Stashed changes
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -146,20 +161,54 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <configuration name="test" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="Dipole_sim" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="C:\Users\etcto\AppData\Local\Programs\Python\Python310\python.exe" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/test.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <list>
+<<<<<<< Updated upstream
       <item itemvalue="Python.9-dipole" />
+=======
+      <item itemvalue="Python.montecarlo3" />
+      <item itemvalue="Python.test" />
+>>>>>>> Stashed changes
       <item itemvalue="Python.7-dipole" />
       <item itemvalue="Python.N-dipole" />
       <item itemvalue="Python.polarization_in_sphere_calc" />
-      <item itemvalue="Python.TPP_blades" />
     </list>
     <recent_temporary>
       <list>
+<<<<<<< Updated upstream
         <item itemvalue="Python.9-dipole" />
+=======
+        <item itemvalue="Python.montecarlo3" />
+        <item itemvalue="Python.test" />
+        <item itemvalue="Python.N-dipole" />
+>>>>>>> Stashed changes
         <item itemvalue="Python.7-dipole" />
         <item itemvalue="Python.N-dipole" />
         <item itemvalue="Python.polarization_in_sphere_calc" />
+<<<<<<< Updated upstream
         <item itemvalue="Python.TPP_blades" />
+=======
+>>>>>>> Stashed changes
       </list>
     </recent_temporary>
   </component>

@@ -7,11 +7,14 @@ import os
 # dipole_strength = 0.08789  # electron charge - nm
 # eps_rel = 1.5
 
-eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
-boltzmann = 8.617e-5  # eV / K
+
 
 
 class DipoleSim:
+
+    eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
+    boltzmann = 8.617e-5  # eV / K
+
     def __init__(self, a: float, rows: int, columns: int, temp0,
                  dipole_strength: float, orientations_num: int = 0, eps_rel: float = 1., p0=None):
         """
@@ -25,8 +28,8 @@ class DipoleSim:
         :param eps_rel: relative dielectric constant of surroundings
         """
         # set units
-        self.k_units = 0.25 / (np.pi * eps0 * eps_rel)
-        self.beta = 1. / (boltzmann * temp0)
+        self.k_units = 0.25 / (np.pi * DipoleSim.eps0 * eps_rel)
+        self.beta = 1. / (DipoleSim.boltzmann * temp0)
         self.Ex = 0.
         self.Ey = 0.
 
