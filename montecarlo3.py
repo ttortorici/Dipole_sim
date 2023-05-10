@@ -51,10 +51,10 @@ class DipoleSim:
         rx = np.array(self.r[:, 0])
         ry = np.array(self.r[:, 1])
 
-        p_dot_p = np.matmul(px.transpose(), px) + np.matmul(py.transpose(), py)
-        dx = np.subtract(rx.transpose(), rx)
-        dy = np.subtract(ry.transpose(), ry)
-        r_sq = dx ** 2 + dy ** 2
+        p_dot_p = px.transpose(), px + py.transpose(), py   # NxN
+        dx = np.subtract(rx.transpose(), rx)                # NxN
+        dy = np.subtract(ry.transpose(), ry)                # NxN
+        r_sq = dx ** 2 + dy ** 2                            # NxN
         r_sq[r_sq == 0] = np.inf
         p_dot_r_sq = (px.transpose() * dx + py.transpose() * dy) * (px * dx + py * dy)
         energy_ext_neg = np.sum(self.E * self.p)
