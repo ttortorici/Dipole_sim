@@ -6,6 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="0fc894f0-685a-4e6d-ac20-785154d74f5a" name="Changes" comment="">
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
       <change afterPath="$PROJECT_DIR$/9-dipole.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/7-dipole.py" beforeDir="false" afterPath="$PROJECT_DIR$/7-dipole.py" afterDir="false" />
@@ -15,6 +16,10 @@
       <change afterPath="$PROJECT_DIR$/test.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/montecarlo2.py" beforeDir="false" afterPath="$PROJECT_DIR$/montecarlo2.py" afterDir="false" />
+>>>>>>> Stashed changes
+=======
+      <change afterPath="$PROJECT_DIR$/ising_susc.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
 >>>>>>> Stashed changes
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -44,13 +49,17 @@
   &quot;keyToString&quot;: {
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/GitHub/Dipole_sim&quot;
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Teddy/Documents/GitHub/Dipole_sim&quot;
   }
 }</component>
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
   <component name="RunManager" selected="Python.9-dipole">
 =======
   <component name="RunManager" selected="Python.montecarlo3">
+>>>>>>> Stashed changes
+=======
+  <component name="RunManager" selected="Python.ising_susc">
 >>>>>>> Stashed changes
     <configuration name="7-dipole" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="Dipole_sim" />
@@ -115,7 +124,11 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+<<<<<<< Updated upstream
     <configuration name="montecarlo3" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+=======
+    <configuration name="ising_susc" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+>>>>>>> Stashed changes
       <module name="Dipole_sim" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -128,9 +141,13 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
       <option name="SCRIPT_NAME" value="C:\Users\Teddy\Documents\GitHub\Dipole_sim\TPP_blades.py" />
 =======
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/montecarlo3.py" />
+>>>>>>> Stashed changes
+=======
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/ising_susc.py" />
 >>>>>>> Stashed changes
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
@@ -184,6 +201,10 @@
     </configuration>
     <list>
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+      <item itemvalue="Python.ising_susc" />
+>>>>>>> Stashed changes
       <item itemvalue="Python.9-dipole" />
 =======
       <item itemvalue="Python.montecarlo3" />
@@ -196,6 +217,10 @@
     <recent_temporary>
       <list>
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+        <item itemvalue="Python.ising_susc" />
+>>>>>>> Stashed changes
         <item itemvalue="Python.9-dipole" />
 =======
         <item itemvalue="Python.montecarlo3" />
@@ -206,7 +231,10 @@
         <item itemvalue="Python.N-dipole" />
         <item itemvalue="Python.polarization_in_sphere_calc" />
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         <item itemvalue="Python.TPP_blades" />
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
       </list>
