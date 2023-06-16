@@ -1,6 +1,7 @@
 import numpy as np
 from itertools import product
 import matplotlib.pylab as plt
+from ising_susc import calc_chi2
 
 a = 1.1  # nm
 a_cubed = a ** 3
@@ -10,6 +11,17 @@ eps_rel = 1.5
 eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
 k_B = 8.617e-5  # eV / K
 coupling_energy = p * p / (4 * np.pi * eps_rel * eps0 * a_cubed)
+
+
+def calc_chi2_odd(T):
+    beta = 1. / (k_B * T)
+    return 9 * p * p * beta / (eps0 * a_cubed * (6 + 3 * np.exp(1.5 * coupling_energy * beta)))
+
+
+def calc_chi2_even(T):
+    beta = 1. / (k_B * T)
+    argv = 1.5 * coupling_energy * beta
+    return p * p * beta * (6 + 3 * np.exp(argv)) / (eps0 * a_cubed * (6 + 3 * np.exp(argv)))
 
 
 def calc_chi(T: np.ndarray, N: int):
@@ -39,7 +51,7 @@ def calc_chi(T: np.ndarray, N: int):
     return p * p * beta / (eps0 * a_cubed * Z) * (Z_second_derivative - Z_first_derivative * Z_first_derivative / Z)
 
 
-if __name__ == "__main__":
+def plot1():
     T_lim = 1000
     T = np.linspace(1, T_lim, 500)
     for nn in range(2, 15):
@@ -48,3 +60,21 @@ if __name__ == "__main__":
     plt.xlim((0, T_lim))
     plt.legend()
     plt.show()
+
+
+def plot_vs_ising():
+    T_lim = 1000
+    T = np.linspace(1, T_lim, 500)
+    plt.plot(T, calc_chi(T, 2), label=f"calc")
+    plt.plot(T, calc_chi2_even(T), label="exact")
+    plt.plot(T, calc_chi2(2, T))
+    plt.plot(T, calc_chi2_odd(T), label="exact")
+    plt.plot(T, calc_chi2(-1, T))
+    plt.ylim((0, 50))
+    plt.xlim((0, T_lim))
+    plt.legend()
+    plt.show()
+
+
+if __name__ == "__main__":
+    plot_vs_ising()
