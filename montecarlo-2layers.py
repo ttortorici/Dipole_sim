@@ -15,11 +15,12 @@ class DipoleSim:
     eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
     boltzmann = 8.617e-5  # eV / K
 
-    def __init__(self, a: float, rows: int, columns: int, temp0,
-                 dipole_strength: float, orientations_num: int = 0, eps_rel: float = 1., p0=None):
+    def __init__(self, a: float, c: int, rows: int, columns: int, temp0,
+                 dipole_strength: float, orientations_num: int = 0, eps_rel: float = 1.5, p0=None):
         """
         Monte Carlo
         :param a: lattice spacing in nm
+        :param c: layer spacing in nm (5 or 10)
         :param rows: number of rows of dipoles
         :param columns: number of columns of dipoles
         :param temp0: initial temperature
@@ -32,22 +33,25 @@ class DipoleSim:
         self.beta = 1. / (DipoleSim.boltzmann * temp0)
         self.Ex = 0.
         self.Ey = 0.
+        self.c_sq = c * c
 
-        self.orientations = self.create_ori_vec(orientations_num, even=False) * dipole_strength
+        # N_o x 2 with first column being x-direction and second being y-direction
+        self.orientations = self.create_ori_vec(orientations_num) * dipole_strength
         self.rx, self.ry = self.gen_dipoles(a, columns, rows)
         # self.rows = rows
         self.columns = columns
         self.N = columns * rows
         if p0 is None:
-            self.px, self.py = self.gen_dipole_orientations(self.N, 3)
+            # 2 x N with top row being top layer and bottom row being bottom layer
+            self.px, self.py = self.gen_dipole_orientations(self.N, 3, even=bool(c % 10))
         else:
-            self.px = np.array([p0[:, 0]])
-            self.py = np.array([p0[:, 1]])
+            self.px = np.array([p0[:2, :]])
+            self.py = np.array([p0[2:, :]])
         self.img_num = 0
         self.accepted = 0
         self.energy = 0
 
-        self.calculate_energy_per_dipole()
+        # self.calculate_energy_per_dipole()
 
     def calc_energy(self):
         p_dot_p = np.matmul(self.px.transpose(), self.px) + np.matmul(self.py.transpose(), self.py)
@@ -67,37 +71,25 @@ class DipoleSim:
         One step of the Monte Carlo
         :return:
         """
-        trial_dipole = random.randint(0, self.N - 1)
-        trial_p = self.orientations[random.randint(0, 2)]
-        if not (self.p[trial_dipole][0] == trial_p[0]):
-            dr = self.calculate_distances(trial_dipole)
-            r_sq = np.sum(dr * dr, 1)
+        # px and py 2 x N with top row being top layer and bottom row being bottom layer
+        # rx and ry N
+        trial_dipole = random.randint(0, self.N-1)              # int
+        trial_layer = random.randint(0, 1)                      # int
+        trial_p = self.orientations[random.randint(0, 2)]       # array: 2
+        dpx = trial_p[0] - self.px[trial_layer, trial_dipole]   # float
+        dpy = trial_p[1] - self.py[trial_layer, trial_dipole]   # float
+        if dpx and dpy:
+            dx = self.rx - self.rx[0, trial_dipole]             # array: N
+            dy = self.ry - self.ry[0, trial_dipole]             # array: N
+            r_sq = dx * dx + dy * dy                            # array: N
+            r_sq_cross_layer = r_sq + self.c_sq
             r_sq[r_sq == 0] = np.inf
-            p_dot_p = np.sum(trial_p * self.p, 1)
-            p_dot_r = np.sum(trial_p * dr, 1) * np.sum(self.p * dr, 1)
-            trial_energy = self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
-                           - np.sum(self.E * trial_p)
-            if random.random() < np.exp(-self.beta * (trial_energy - self.energy)):
-                self.accepted += 1
-                self.p[trial_dipole] = trial_p
-                self.energy = trial_energy
-        return self.energy
+            p_dot_dp = self.px * dpx + self.py * dpy            # array: 2 x N
+            r_dot_p = dx * self.px + dy * self.py               # array:
+            r_dot_dp = dx * dpx + dy * dpy
+            trial_energy_int_layer0 = np.sum(p_dot_dp / r_sq ** 1.5 - 3. * r_dot_dp * r_dot_p / r_sq ** 2.5)
+            tr
 
-    def step_internal(self):
-        """
-        One step of the Monte Carlo
-        :return:
-        """
-        trial_dipole = random.randint(self.columns, self.N - 1 - self.columns)
-        while trial_dipole % self.columns in [0, self.columns - 1]:
-            trial_dipole = random.randint(self.columns, self.N - 1 - self.columns)
-        trial_p = self.orientations[random.randint(0, 2)]
-        if not (self.p[trial_dipole][0] == trial_p[0]):
-            dr = self.calculate_distances(trial_dipole)
-            r_sq = np.sum(dr * dr, 1)
-            r_sq[r_sq == 0] = np.inf
-            p_dot_p = np.sum(trial_p * self.p, 1)
-            p_dot_r = np.sum(trial_p * dr, 1) * np.sum(self.p * dr, 1)
             trial_energy = self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
                            - np.sum(self.E * trial_p)
             if random.random() < np.exp(-self.beta * (trial_energy - self.energy)):
@@ -154,39 +146,45 @@ class DipoleSim:
             start = jj * height
             rx[start:start + width] = np.arange(width) * a + x * jj
             ry[start:start + width] = np.ones(width) * y * jj
-        return np.array([rx]), np.array([ry])
+        return rx, ry
 
-    def gen_dipole_orientations(self, dipole_num: int, orientation_num: int) -> tuple[np.ndarray, np.ndarray]:
+    def gen_dipole_orientations(self, dipole_num: int, orientation_num: int, even=True) -> tuple[np.ndarray, np.ndarray]:
         """
         Initialize dipole directions
         :param dipole_num: number of dipoles
         :param orientation_num: number of possible orientations a dipole can take
+        :param even: is the c-axis spacing even or odd TPP layer spacings
         :return: array of 2-vectors repsenting dipole strength in x and y directions
         """
-        px = np.zeros(dipole_num)
-        py = np.zeros(dipole_num)
+        px = np.zeros((2, dipole_num))
+        py = np.zeros((2, dipole_num))
         stop = orientation_num - 1
+        # populate first layer
         for ii in range(dipole_num):
             pi = self.orientations[random.randint(0, stop)]
-            px[ii] = pi[0]
-            py[ii] = pi[1]
+            px[0, ii] = pi[0]
+            py[0, ii] = pi[1]
+        # populate second layer
+        for ii in range(dipole_num):
+            pi = self.orientations[random.randint(0, stop)]
+            px[1, ii] = pi[0]
+            py[1, ii] = pi[1]
+        if not even:
+            px[1, :] = -px[1, :]
+            py[1, :] = -py[1, :]
         return np.array([px]), np.array([py])
 
     @staticmethod
-    def create_ori_vec(orientations_num, even=True):
+    def create_ori_vec(orientations_num: int) -> np.ndarray:
         """
         Creates the basis vectors for possible directions
         :param orientations_num: number of possible directions
         :return: array of 2-long basis vectors
         """
-        if orientations_num:
-            del_theta = 2 * np.pi / orientations_num
-            orientations = np.zeros(orientations_num, 2)
-            for e in range(orientations_num):
-                orientations[e] = np.array([np.cos(del_theta * e), np.sin(del_theta * e)])
-        else:
-            sqrt3half = np.sqrt(3) * 0.5
-            orientations = np.array([[0, 1], [sqrt3half, -0.5], [-sqrt3half, -0.5]])
+        del_theta = 2 * np.pi / orientations_num
+        orientations = np.zeros((orientations_num, 2))
+        for e in range(orientations_num):
+            orientations[e] = np.array([np.cos(del_theta * e), np.sin(del_theta * e)])
         return orientations
 
     def save_img(self):
@@ -217,4 +215,4 @@ if __name__ == "__main__":
             sim.step()
         sim.save_img()
         print(ii)
-    np.savetxt('dipoles_300K_field_5000000.txt', sim.p)
+    np.savetxt('dipoles_300K_field_5000000.txt', np.concatenate((sim.px, sim.py)))
