@@ -79,15 +79,19 @@ class DipoleSim:
         dpx = trial_p[0] - self.px[trial_layer, trial_dipole]   # float
         dpy = trial_p[1] - self.py[trial_layer, trial_dipole]   # float
         if dpx and dpy:
+            r_sq = np.zeros((2, self.N))                        # array: 2 x N
             dx = self.rx - self.rx[0, trial_dipole]             # array: N
             dy = self.ry - self.ry[0, trial_dipole]             # array: N
-            r_sq = dx * dx + dy * dy                            # array: N
-            r_sq_cross_layer = r_sq + self.c_sq
+            r_sq[0, :] = dx * dx + dy * dy                      # intra-layer
+            r_sq[1, :] = r_sq[0, :] + self.c_sq                 # inter-layer
             r_sq[r_sq == 0] = np.inf
             p_dot_dp = self.px * dpx + self.py * dpy            # array: 2 x N
-            r_dot_p = dx * self.px + dy * self.py               # array:
-            r_dot_dp = dx * dpx + dy * dpy
-            trial_energy_int_layer0 = np.sum(p_dot_dp / r_sq ** 1.5 - 3. * r_dot_dp * r_dot_p / r_sq ** 2.5)
+            r_dot_p = dx * self.px + dy * self.py               # array: 2 x N
+            r_dot_dp = dx * dpx + dy * dpy                      # array: N
+            rs_dot_ps = r_dot_dp * r_dot_p                      # array: 2 x N
+            trial_energy_int_intralayer = np.sum(p_dot_dp / r_sq ** 1.5 - 3. * rs_dot_ps / r_sq ** 2.5)
+            r_sq[[0, 1]] = r_sq[[1, 0]]
+            trial_energy_int_interlayer =
             tr
 
             trial_energy = self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
