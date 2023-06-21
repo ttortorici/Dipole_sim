@@ -137,24 +137,56 @@ class DipoleSim:
         return 1. / (boltzmann * self.beta)
 
     @staticmethod
-    def gen_dipoles(a: float, width: int, height: int) -> tuple[np.ndarray, np.ndarray]:
+    def gen_dipoles_triangular(a: float, rows: int, columns: int) -> np.ndarray:
         """
-        Generate the vectors of position for each dipole
+        Generate the vectors of position for each dipole in triangular lattice in a rhombus
         :param a: spacing between dipoles in nm
-        :param width: number of columns
-        :param height: number of rows
-        :return: tuple of 2 N-long-vectors representing position of dipoles
+        :param rows: number of rows
+        :param columns: number of columns
+        :return: position of dipoles
         """
-        sqrt3half = np.sqrt(3) * 0.5
         x = 0.5 * a
-        y = a * sqrt3half
-        rx = np.zeros(width * height)
-        ry = np.zeros(width * height)
-        for jj in range(height):
-            start = jj * height
-            rx[start:start + width] = np.arange(width) * a + x * jj
-            ry[start:start + width] = np.ones(width) * y * jj
-        return np.array([rx]), np.array([ry])
+        y = a * np.sqrt(3) * 0.5
+        r = np.zeros((rows * columns, 2))
+        for jj in range(rows):
+            start = jj * rows
+            r[start:start + columns, 0] = np.arange(columns) * a + x * jj
+            r[start:start + columns, 1] = np.ones(columns) * y * jj
+        return r
+
+    @staticmethod
+    def gen_dipoles_triangular2(a: float, rows: int, columns: int) -> np.ndarray:
+        """
+        Generate the vectors of position for each dipole in a triangular lattice in a square
+        :param a: spacing between dipoles in nm
+        :param rows: number of rows
+        :param columns: number of columns
+        :return: position of dipoles
+        """
+        x = 0.5 * a
+        y = a * np.sqrt(3) * 0.5
+        r = np.zeros((rows * columns, 2))
+        for jj in range(rows):
+            start = jj * rows
+            r[start:start + columns, 0] = np.arange(columns) * a + x * (jj % 2)
+            r[start:start + columns, 1] = np.ones(columns) * y * jj
+        return r
+
+    @staticmethod
+    def gen_dipoles_square(a: float, rows: int, columns: int) -> np.ndarray:
+        """
+        Generate the vectors of position for each dipole in a square lattice
+        :param a: spacing between dipoles in nm
+        :param rows: number of rows
+        :param columns: number of columns
+        :return: position of dipoles
+        """
+        r = np.zeros((rows * columns, 2))
+        for jj in range(rows):
+            start = jj * rows
+            r[start:start + columns, 0] = np.arange(columns) * a
+            r[start:start + columns, 1] = np.ones(columns) * a * jj
+        return r
 
     def gen_dipole_orientations(self, dipole_num: int, orientation_num: int) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -217,4 +249,4 @@ if __name__ == "__main__":
             sim.step()
         sim.save_img()
         print(ii)
-    np.savetxt('dipoles_300K_field_5000000.txt', sim.p)
+    np.savetxt('double_layer_odd_17A.txt', sim.p)

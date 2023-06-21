@@ -275,7 +275,7 @@ if __name__ == "__main__":
     #         sim.step()
     #     sim.save_img()
     #     print(ii)
-    # np.savetxt('dipoles_300K_field_5000000.txt', sim.p)
+    # np.savetxt('double_layer_odd_17A.txt', sim.p)
     from time import perf_counter
 
     sim = DipoleSim(a=1.1, rows=30, columns=30,
