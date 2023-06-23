@@ -56,7 +56,7 @@ class DipoleSim:
         self.N = columns * rows
         self.N_total = self.N * 2
         if p0 is None:
-            self.p = self.gen_dipole_orientations() * dipole_strength
+            self.p = self.gen_dipole_orientations()
         else:
             self.p = p0
         self.img_num = 0
