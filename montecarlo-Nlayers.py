@@ -1,7 +1,10 @@
+import sys
+
 import numpy as np
 import matplotlib.pylab as plt
 import random
 import os
+# np.set_printoptions(threshold=np.inf)
 
 
 # a = 1.1  # nm
@@ -41,6 +44,40 @@ class DipoleSim:
         else:
             print("inter - even")
 
+        self.layer_orientation = [1] * layers
+        self.c_sqs_even = np.zeros((layers, 1))
+        self.c_sqs_odd = np.zeros((layers, 1))
+        self.layer_distances = np.zeros((layers, layers, 1))
+        for ll in range(layers):
+            ll_half = int(ll * 0.5)
+            ll_half_with_remainder = ll - ll_half
+            self.c_sqs_even[ll] = (ll_half_with_remainder * c1 + ll_half * c2) ** 2
+            self.c_sqs_odd[ll] = (ll_half * c1 + ll_half_with_remainder * c2) ** 2
+            if self.odd1 and self.odd2:
+                if ll & 1:
+                    self.layer_orientation[ll] = -1
+            elif self.odd1:
+                if int(0.5 * (ll + 1)) & 1:
+                    self.layer_orientation[ll] = -1
+            elif self.odd2:
+                if int(0.5 * ll) & 1:
+                    self.layer_orientation[ll] = -1
+            # now ll is trial layer
+        for l_trial in range(layers):
+            for ll in range(layers):
+                layer_diff = ll - l_trial
+                if layer_diff > 0:
+                    if l_trial & 1:
+                        layer_distance = self.c_sqs_odd[layer_diff]
+                    else:
+                        layer_distance = self.c_sqs_even[layer_diff]
+                else:
+                    if l_trial & 1:
+                        layer_distance = self.c_sqs_even[-layer_diff]
+                    else:
+                        layer_distance = self.c_sqs_odd[-layer_diff]
+                self.layer_distances[l_trial, ll, 0] = layer_distance
+
         # set units
         self.k_units = 0.25 / (np.pi * DipoleSim.eps0 * eps_rel)
         self.beta = 1. / (DipoleSim.boltzmann * temp0)
@@ -65,7 +102,7 @@ class DipoleSim:
         self.N = columns * rows
         self.N_total = self.N * layers
         if p0 is None:
-            self.p = self.gen_dipole_orientations() * dipole_strength
+            self.p = self.gen_dipole_orientations()
         else:
             self.p = p0
         self.img_num = 0
@@ -130,40 +167,16 @@ class DipoleSim:
         trial_dipole = self.rng.integers(self.N)        # int
         trial_layer = self.rng.integers(self.layers)    # int
         layer_oddness = trial_layer & 1
-        trial_p = self.orientations[self.rng.integers(self.orientations_num)]  # array: 2
-        if self.odd1:
-            if self.odd2:
-                if layer_oddness:
-                    trial_p = -trial_p              # odd-odd -- alternate every layer
-            elif int(0.5 * (trial_layer + 1)) & 1:  # odd-even -- alternate every other starting with 1
-                trial_p = -trial_p
-        elif self.odd2:
-            if int(0.5 * trial_layer) & 1:          # even-odd -- alternate every other starting with 2
-                trial_p = -trial_p
+
+        # select trial dipole and flip its orientations if it's in an odd layer
+        trial_p = self.orientations[self.rng.integers(self.orientations_num)] * self.layer_orientation[trial_layer]
+
         dp = trial_p - self.p[trial_layer, trial_dipole, :]
         if dp[0] and dp[1]:
-            #r_sq = np.zeros((self.layers, self.N))  # array: L x N
-
             dr = self.r - self.r[trial_dipole]  # array: N x 2
             r_sq = np.tile(np.sum(dr * dr, axis=1), (self.layers, 1))
+            r_sq += self.layer_distances[trial_layer]
 
-            for ll in range(self.layers):
-                layer_diff = ll - trial_layer
-                layer_diff_half = layer_diff * 0.5
-                c1s = int(abs(layer_diff_half))
-                c2s = c1s
-                if layer_diff > c1s + c2s:
-                    if layer_diff > 0:
-                        c2s += 1
-                    else:
-                        c1s += 1
-                layer_distance = c1s * self.c1 + c2s * self.c2
-                layer
-                r_sq[ll] +=
-                if (layer_oddness and trial_layer < 0) or (not layer_oddness and trial_layer < 0):
-                r_sq[]
-                r_sq[trial_layer, :] = np.sum(dr * dr, axis=1)  # array: N (same layer)
-                r_sq[(trial_layer + 1) & 1, :] = r_sq[trial_layer, :] + self.c_sq  # array: N (other layer)
             r_sq[r_sq == 0] = np.inf  # remove self energy
             p_dot_dp = np.sum(self.p * dp, axis=2)  # array: 2 x N
             r_dot_p = np.sum(self.p * dr, axis=2)  # array: 2 x N
@@ -174,6 +187,8 @@ class DipoleSim:
             if random.random() < np.exp(self.beta * energy_decrease):
                 self.accepted += 1
                 self.p[trial_layer, trial_dipole, :] = trial_p
+                # print("accepted")
+                # print(trial_p)
 
     def run_over_system(self):
         for _ in range(self.N_total):
@@ -268,16 +283,9 @@ class DipoleSim:
         Initialize dipole directions
         :return: 2 x N x 2 array
         """
-        p_directions = np.zeros((2, self.N, 2))  # first is number of layers, second dipoles, third vector size
-
-        """populate first layer"""
-        p_directions[0, :, :] = self.orientations[self.rng.integers(0, self.orientations_num, size=self.N)]
-
-        """populate second layer"""
-        if self.odd:
-            p_directions[1, :, :] = -self.orientations[self.rng.integers(0, self.orientations_num, size=self.N)]
-        else:
-            p_directions[1, :, :] = self.orientations[self.rng.integers(0, self.orientations_num, size=self.N)]
+        p_directions = np.zeros((self.layers, self.N, 2))  # 1st is number of layers, 2nd dipoles, 3rd vector size
+        for ll, negative in enumerate(self.layer_orientation):
+            p_directions[ll] = self.orientations[self.rng.integers(0, self.orientations_num, size=self.N)] * negative
         return p_directions
 
     @staticmethod
@@ -302,17 +310,25 @@ class DipoleSim:
         plt.figure()
         arrow_vecs = self.p * 3
         arrow_starts = self.r - arrow_vecs * 0.5
+        # print(arrow_vecs)
+        # print(arrow_starts)
+
         # p_net = np.sum(arrow_vecs, axis=0)
-        colors = ["b", "r"]
-        if self.odd:
-            oddness = "odd"
+        colors = ["b", "r", "g", "m"]
+        if self.odd1:
+            oddness1 = "odd"
         else:
-            oddness = "even"
-        for color, r_layer, p_layer in zip(colors, arrow_starts, arrow_vecs):
+            oddness1 = "even"
+        if self.odd2:
+            oddness2 = "odd"
+        else:
+            oddness2 = "even"
+        for ii, color, r_layer, p_layer in zip(range(len(arrow_starts)), colors, arrow_starts, arrow_vecs):
+            p_layer *= (1 - ii * 0.1)
             for start, p in zip(r_layer, p_layer):
                 plt.arrow(start[0], start[1], p[0], p[1], color=color,
-                          length_includes_head=True, head_width=0.1, head_length=0.1)
-        plt.savefig(f"plots_2_{oddness}{os.sep}{name}.png", dpi=1000, format=None, metadata=None,
+                          length_includes_head=True, width=0.00005, head_width=0.01, head_length=0.01)
+        plt.savefig(f"plots_N_{oddness1}_{oddness2}{os.sep}{name}.png", dpi=2000, format=None, metadata=None,
                     bbox_inches=None, pad_inches=0, facecolor='auto', edgecolor=None)
         # for start, p
         plt.close()
@@ -328,19 +344,19 @@ def load(filename):
 
 
 def run_over_even_and_odd(temperature: float, times: int):
-    for c, oddness in zip((.55, .77), ("odd", "even")):
-        sim = DipoleSim(a=1.1, c=c, rows=30, columns=30,
-                        temp0=temperature, dipole_strength=0.08789,
-                        orientations_num=3, eps_rel=1.5,
-                        lattice="t2")
-        # sim.change_electric_field(np.array([0, 10]))
-        # sim.save_img()
-        for ii in range(times):
-            for _ in range(1):
-                sim.run_over_system()
-            sim.save_img()
-            print(ii)
-        # np.savetxt(f'double_layer_{oddness}_10A.txt', np.column_stack((sim.p[0, :, :], sim.p[1, :, :])))
+    for c1, oddness1 in zip((1.78, 12.7), ("even", "odd")):
+        for c2, oddness2 in zip((1., 15.2), ("even", "odd")):
+            sim = DipoleSim(a=1.1, c1=c1, c2=c2, layers=4, rows=20, columns=20,
+                            temp0=10, dipole_strength=0.08789, orientations_num=3,
+                            eps_rel=1.5, lattice="t2")
+            # sim.change_electric_field(np.array([0, 10]))
+            # sim.save_img()
+            for ii in range(times):
+                for _ in range(1):
+                    sim.run_over_system()
+                sim.save_img()
+                print(ii)
+            # np.savetxt(f'double_layer_{oddness}_10A.txt', np.column_stack((sim.p[0, :, :], sim.p[1, :, :])))
 
 
 def cool_down(temperatures, smoothing=None):
@@ -419,7 +435,11 @@ def cool_down(temperatures, smoothing=None):
 
 
 if __name__ == "__main__":
+    run_over_even_and_odd(5, 10)
     # sim = DipoleSim(1.1, 30, 30, 45, np.array([0, 0]), 0.08789, 0, 1.5)
     # p = load('dipoles_300K_ferro_5000000.txt')
-    cool_down(np.arange(10, 1510, 10)[::-1], smoothing=5)
+    # cool_down(np.arange(10, 1510, 10)[::-1], smoothing=5)
     # cool_down(np.arange(10, 30, 10)[::-1], smoothing=10)
+    # sim = DipoleSim(a=1.1, c1=0.5, c2=0.7, layers=10, rows=30, columns=30,
+    #                 temp0=10, dipole_strength=0.08789, orientations_num=3,
+    #                 eps_rel=1.5, lattice="t2")
