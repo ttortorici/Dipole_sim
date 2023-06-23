@@ -13,12 +13,14 @@ class DipoleSim:
     eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
     boltzmann = 8.617e-5  # eV / K
 
-    def __init__(self, a: float, c: float, rows: int, columns: int, temp0, dipole_strength: float,
-                 orientations_num: int = 0, eps_rel: float = 1.5, lattice: str = "t", p0=None):
+    def __init__(self, a: float, c1: float, c2: float, layers: int, rows: int, columns: int, temp0,
+                 dipole_strength: float, orientations_num: int = 0, eps_rel: float = 1.5, lattice: str = "t", p0=None):
         """
         Monte Carlo
         :param a: lattice spacing in nm
-        :param c: layer spacing in nm
+        :param c1: intramolecular layer spacing in nm
+        :param c2: intermolecular layer spacing in nm
+        :param layers: number of layers of dipoles
         :param rows: number of rows of dipoles
         :param columns: number of columns of dipoles
         :param temp0: initial temperature
@@ -28,11 +30,16 @@ class DipoleSim:
         """
         self.rng = np.random.default_rng()
 
-        self.odd = bool(round(2. * c) % 2)
-        if self.odd:
-            print("odd")
+        self.odd1 = bool(round(2. * c1) & 1)
+        self.odd2 = bool(round(2. * c2) & 1)
+        if self.odd1:
+            print("intra - odd")
         else:
-            print("even")
+            print("intra - even")
+        if self.odd2:
+            print("inter - odd")
+        else:
+            print("inter - even")
 
         # set units
         self.k_units = 0.25 / (np.pi * DipoleSim.eps0 * eps_rel)
@@ -40,7 +47,9 @@ class DipoleSim:
         self.E = np.zeros(2)
 
         # store layer constant
-        self.c_sq = c * c
+        self.c1 = c1
+        self.c2 = c2
+        self.layers = layers
 
         self.orientations_num = orientations_num
         self.orientations = self.create_ori_vec(orientations_num) * dipole_strength
@@ -54,7 +63,7 @@ class DipoleSim:
         # self.rows = rows
         self.columns = columns
         self.N = columns * rows
-        self.N_total = self.N * 2
+        self.N_total = self.N * layers
         if p0 is None:
             self.p = self.gen_dipole_orientations() * dipole_strength
         else:
@@ -69,17 +78,16 @@ class DipoleSim:
 
         :return:
         """
-        # arrange all the x- and y-values in 1 x 2N arrays
+        # arrange all the x- and y-values in 1 x l*N arrays
         px = np.array([np.ravel(self.p[:, :, 0])])  # 1 x 2N
         py = np.array([np.ravel(self.p[:, :, 1])])
 
-        # duplicate xy values of r into 1 x 2N arrays
+        # duplicate xy values of r into 1 x l*N arrays
         rx = np.zeros((1, self.N_total))
         ry = np.zeros((1, self.N_total))
-        rx[0, :self.N] = self.r[:, 0]
-        rx[0, self.N:] = self.r[:, 0]
-        ry[0, :self.N] = self.r[:, 1]
-        ry[0, self.N:] = self.r[:, 1]
+        for ll in range(self.layers):
+            rx[0, ll * self.N:(ll + 1) * self.N] = self.r[:, 0]
+            ry[0, ll * self.N:(ll + 1) * self.N] = self.r[:, 1]
 
         # generate all dipoles dotted with other dipoles
         p_dot_p = px.T * px + py.T * py  # 2N x 2N
@@ -88,8 +96,21 @@ class DipoleSim:
         dx = rx.T - rx
         dy = ry.T - ry
         r_sq = dx * dx + dy * dy  # NxN
-        r_sq[self.N:, :self.N] += self.c_sq  # add interlayer distances
-        r_sq[:self.N, self.N:] += self.c_sq  # add interlayer distances
+        # distance between layers
+        for ll in range(1, self.layers):
+            layer_diff_half = ll * .5
+            c1s = int(np.ceil(layer_diff_half))
+            c2s = int(layer_diff_half)
+            layer_distance = c1s * self.c1 + c2s * self.c2
+            layer_dist_sq = layer_distance * layer_distance
+            for kk in range(ll):
+                dd = ll - kk
+                start1 = (dd - 1) * self.N
+                end1 = dd * self.N
+                start2 = ll * self.N
+                end2 = (ll + 1) * self.N
+                r_sq[start1:end1, start2:end2] += layer_dist_sq
+                r_sq[start2:end2, start1:end2] += layer_dist_sq
         r_sq[r_sq == 0] = np.inf  # this removes self energy
 
         p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
@@ -106,17 +127,43 @@ class DipoleSim:
         """
         # px and py 2 x N with top row being top layer and bottom row being bottom layer
         # rx and ry N
-        trial_dipole = self.rng.integers(self.N)  # int
-        trial_layer = self.rng.integers(2)  # int
+        trial_dipole = self.rng.integers(self.N)        # int
+        trial_layer = self.rng.integers(self.layers)    # int
+        layer_oddness = trial_layer & 1
         trial_p = self.orientations[self.rng.integers(self.orientations_num)]  # array: 2
-        if trial_layer and self.odd:
-            trial_p = -trial_p
+        if self.odd1:
+            if self.odd2:
+                if layer_oddness:
+                    trial_p = -trial_p              # odd-odd -- alternate every layer
+            elif int(0.5 * (trial_layer + 1)) & 1:  # odd-even -- alternate every other starting with 1
+                trial_p = -trial_p
+        elif self.odd2:
+            if int(0.5 * trial_layer) & 1:          # even-odd -- alternate every other starting with 2
+                trial_p = -trial_p
         dp = trial_p - self.p[trial_layer, trial_dipole, :]
         if dp[0] and dp[1]:
-            r_sq = np.zeros((2, self.N))  # array: 2 x N
+            #r_sq = np.zeros((self.layers, self.N))  # array: L x N
+
             dr = self.r - self.r[trial_dipole]  # array: N x 2
-            r_sq[trial_layer, :] = np.sum(dr * dr, axis=1)  # array: N (same layer)
-            r_sq[(trial_layer + 1) & 1, :] = r_sq[trial_layer, :] + self.c_sq  # array: N (other layer)
+            r_sq = np.tile(np.sum(dr * dr, axis=1), (self.layers, 1))
+
+            for ll in range(self.layers):
+                layer_diff = ll - trial_layer
+                layer_diff_half = layer_diff * 0.5
+                c1s = int(abs(layer_diff_half))
+                c2s = c1s
+                if layer_diff > c1s + c2s:
+                    if layer_diff > 0:
+                        c2s += 1
+                    else:
+                        c1s += 1
+                layer_distance = c1s * self.c1 + c2s * self.c2
+                layer
+                r_sq[ll] +=
+                if (layer_oddness and trial_layer < 0) or (not layer_oddness and trial_layer < 0):
+                r_sq[]
+                r_sq[trial_layer, :] = np.sum(dr * dr, axis=1)  # array: N (same layer)
+                r_sq[(trial_layer + 1) & 1, :] = r_sq[trial_layer, :] + self.c_sq  # array: N (other layer)
             r_sq[r_sq == 0] = np.inf  # remove self energy
             p_dot_dp = np.sum(self.p * dp, axis=2)  # array: 2 x N
             r_dot_p = np.sum(self.p * dr, axis=2)  # array: 2 x N
