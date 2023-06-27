@@ -33,6 +33,8 @@ class DipoleSim:
         """
         self.rng = np.random.default_rng()
 
+        self.volume = a * rows * a * columns * (c1 + c2) * layers * 0.5
+
         self.odd1 = bool(round(2. * c1) & 1)
         self.odd2 = bool(round(2. * c2) & 1)
         if self.odd1:
@@ -157,6 +159,12 @@ class DipoleSim:
         # need to divide by 2 to avoid double counting
         return 0.5 * self.k_units * np.sum(energy_int) - energy_ext_neg
 
+    def calc_polarization(self):
+        """
+        :return: net dipole moment per unit volume
+        """
+        return np.sqrt(np.sum(np.sum(self.p, axis=(0, 1)) ** 2)) / self.volume
+
     def step(self):
         """
         One step of the Monte Carlo
@@ -193,13 +201,6 @@ class DipoleSim:
     def run_over_system(self):
         for _ in range(self.N_total):
             self.step()
-
-    def calculate_polarization(self) -> np.ndarray:
-        """
-        Calculate net dipole moment of the system
-        :return: 2-vector of x and y components
-        """
-        return np.sum(self.px)
 
     def change_temperature(self, temperature: float):
         """
@@ -327,7 +328,7 @@ class DipoleSim:
             p_layer *= (1 - ii * 0.1)
             for start, p in zip(r_layer, p_layer):
                 plt.arrow(start[0], start[1], p[0], p[1], color=color,
-                          length_includes_head=True, width=0.00005, head_width=0.01, head_length=0.01)
+                          length_includes_head=True, width=0.00001, head_width=0.01, head_length=0.01)
         plt.savefig(f"plots_N_{oddness1}_{oddness2}{os.sep}{name}.png", dpi=2000, format=None, metadata=None,
                     bbox_inches=None, pad_inches=0, facecolor='auto', edgecolor=None)
         # for start, p
@@ -344,8 +345,8 @@ def load(filename):
 
 
 def run_over_even_and_odd(temperature: float, times: int):
-    for c1, oddness1 in zip((1.78, 12.7), ("even", "odd")):
-        for c2, oddness2 in zip((1., 15.2), ("even", "odd")):
+    for c1, oddness1 in zip((1.78, 1.27), ("even", "odd")):
+        for c2, oddness2 in zip((1., 1.52), ("even", "odd")):
             sim = DipoleSim(a=1.1, c1=c1, c2=c2, layers=4, rows=20, columns=20,
                             temp0=10, dipole_strength=0.08789, orientations_num=3,
                             eps_rel=1.5, lattice="t2")
@@ -359,86 +360,77 @@ def run_over_even_and_odd(temperature: float, times: int):
             # np.savetxt(f'double_layer_{oddness}_10A.txt', np.column_stack((sim.p[0, :, :], sim.p[1, :, :])))
 
 
-def cool_down(temperatures, smoothing=None):
-    for c, oddness in zip((.55, .77), ("odd", "even")):
-        energies = np.zeros(len(temperatures))
-        px_layer1 = np.zeros(len(temperatures))
-        py_layer1 = np.zeros(len(temperatures))
-        px_layer2 = np.zeros(len(temperatures))
-        py_layer2 = np.zeros(len(temperatures))
-        p_total = np.zeros(len(temperatures))
-        if smoothing:
-            energies_std = np.zeros(len(temperatures))
+def cool_down(layers, temperatures, smoothing=None):
+    fig1, ax_energy = plt.subplots()
+    fig2, ax_polar = plt.subplots(ncols=2, nrows=2, figsize=(9, 6))
+    for p1, c1, oddness1 in zip(range(2), (1.78, 1.27), ("even", "odd")):
+        for p2, c2, oddness2 in zip(range(2), (1., 1.52), ("even", "odd")):
+            energies = np.zeros(len(temperatures))
+            p_temperature = np.zeros((len(temperatures), layers, 2))
             p_total = np.zeros(len(temperatures))
-            p_std = np.zeros(len(temperatures))
-        sim = DipoleSim(a=1.1, c=c, rows=30, columns=30,
-                        temp0=temperatures[0], dipole_strength=0.08789,
-                        orientations_num=3, eps_rel=1.5,
-                        lattice="t2")
-        for ii, temperature in enumerate(temperatures):
-            t_string = f"{temperature} K"
-            print(t_string)
-            sim.change_temperature(temperature)
-            if smoothing is None:
-                for _ in range(20):
-                    sim.run_over_system()
-                ps = np.sum(sim.p, axis=1)
-                px_layer1[ii] = ps[0, 0]
-                py_layer1[ii] = ps[0, 1]
-                px_layer2[ii] = ps[1, 0]
-                py_layer2[ii] = ps[1, 1]
-                energies[ii] = sim.calc_energy()
-                sim.save_img(t_string)
-            else:
-                ps_to_smooth = np.zeros((smoothing, 2, 2))
-                energies_to_smooth = np.zeros(smoothing)
-                p_total_to_smooth = np.zeros(smoothing)
-                for ss in range(smoothing):
+            if smoothing:
+                energies_std = np.zeros(len(temperatures))
+                # p_total = np.zeros(len(temperatures))
+                p_std = np.zeros(len(temperatures))
+            sim = DipoleSim(a=1.1, c1=c1, c2=c2, layers=layers, rows=20, columns=20,
+                            temp0=10, dipole_strength=0.08789, orientations_num=3,
+                            eps_rel=1.5, lattice="t2")
+            for tt, temperature in enumerate(temperatures):
+                t_string = f"{temperature} K"
+                print(t_string)
+                sim.change_temperature(temperature)
+                if smoothing is None:
                     for _ in range(20):
                         sim.run_over_system()
-                    ps_to_smooth[ss] = np.sum(sim.p, axis=1)
-                    energies_to_smooth[ss] = sim.calc_energy()
-                    p_total_to_smooth[ss] = np.sqrt((ps_to_smooth[ss, 0, 0] + ps_to_smooth[ss, 1, 0]) ** 2) + \
-                                                    (ps_to_smooth[ss, 0, 1] + ps_to_smooth[ss, 1, 1]) ** 2
-                energies[ii] = np.sum(energies_to_smooth) / smoothing
-                energies_std[ii] = np.sqrt(np.sum((energies_to_smooth - energies[ii]) ** 2) / smoothing)
-                ps = np.sum(ps_to_smooth, axis=0) / smoothing
-                px_layer1[ii] = ps[0, 0]
-                py_layer1[ii] = ps[0, 1]
-                px_layer2[ii] = ps[1, 0]
-                py_layer2[ii] = ps[1, 1]
-                p_total[ii] = np.sum(p_total_to_smooth) / smoothing
-                p_std[ii] = np.sqrt(np.sum((p_total_to_smooth - p_total[ii]) ** 2) / smoothing)
-        plt.figure()
-        if smoothing is None:
-            p_total = np.sqrt((px_layer1 + px_layer2) ** 2) + (py_layer1 + py_layer2) ** 2
-            plt.plot(temperatures, energies)
-            plt.title(f"Energy {oddness}")
+                    p_temperature[tt] = np.sum(sim.p, axis=1)
+                    energies[tt] = sim.calc_energy()
+                    # sim.save_img(t_string)
+                else:
+                    ps_to_smooth = np.zeros((smoothing, layers, 2))
+                    energies_to_smooth = np.zeros(smoothing)
+                    for ss in range(smoothing):
+                        for _ in range(20):
+                            sim.run_over_system()
+                        ps_to_smooth[ss] = np.sum(sim.p, axis=1)
+                        energies_to_smooth[ss] = sim.calc_energy()
+                        # p_total_to_smooth[ss] = np.sqrt((ps_to_smooth[ss, 0, 0] + ps_to_smooth[ss, 1, 0]) ** 2) + \
+                        #                                 (ps_to_smooth[ss, 0, 1] + ps_to_smooth[ss, 1, 1]) ** 2
+
+                    energies[tt] = np.sum(energies_to_smooth) / smoothing
+                    energies_std[tt] = np.sqrt(np.sum((energies_to_smooth - energies[tt]) ** 2) / smoothing)
+                    p_temperature[tt] = np.sum(ps_to_smooth, axis=0) / smoothing
+                    p_to_ave = np.sum(np.sum(ps_to_smooth, axis=1) ** 2, axis=1)
+                    p_total[tt] = np.sum(p_to_ave) / smoothing
+
+                    p_std[tt] = np.sqrt(np.sum((p_temperature[tt] - p_total[tt]) ** 2) / smoothing)
             plt.figure()
-            plt.plot(temperatures, px_layer1, label="x-1")
-            plt.plot(temperatures, px_layer2, label="x-2")
-            plt.plot(temperatures, py_layer1, label="y-1")
-            plt.plot(temperatures, py_layer2, label="y-2")
-            plt.plot(temperatures, p_total)
-        else:
-            plt.errorbar(temperatures, energies, yerr=energies_std)
-            plt.title(f"Energy {oddness}")
-            plt.figure()
-            plt.plot(temperatures, px_layer1, label="x-1")
-            plt.plot(temperatures, px_layer2, label="x-2")
-            plt.plot(temperatures, py_layer1, label="y-1")
-            plt.plot(temperatures, py_layer2, label="y-2")
-            plt.errorbar(temperatures, p_total, yerr=p_std, label="p_total")
-        plt.title(f"Polarization {oddness}")
-        plt.legend()
+            if smoothing is None:
+                p_total = np.sqrt(np.sum(np.sum(p_temperature, axis=1) ** 2), axis=1)
+                ax_energy.plot(temperatures, energies)
+                plt.title(f"Energy {oddness1}-{oddness2}")
+                plt.figure()
+                for ll in range(layers):
+                    ax_polar[p1, p2].plot(temperatures, p_temperature[:, ll, 0], label=f"x-{ll}")
+                    ax_polar[p1, p2].plot(temperatures, p_temperature[:, ll, 1], label=f"y-{ll}")
+                plt.plot(temperatures, p_total)
+            else:
+                plt.errorbar(temperatures, energies, yerr=energies_std)
+                plt.title(f"Energy {oddness2}-{oddness2}")
+                plt.figure()
+                for ll in range(layers):
+                    plt.plot(temperatures, p_temperature[:, ll, 0], label=f"x-{ll}")
+                    plt.plot(temperatures, p_temperature[:, ll, 1], label=f"y-{ll}")
+                plt.errorbar(temperatures, p_total, yerr=p_std, label="p_total")
+            plt.title(f"Polarization {oddness2}-{oddness2}")
+            plt.legend()
     plt.show()
 
 
 if __name__ == "__main__":
-    run_over_even_and_odd(5, 10)
+    # run_over_even_and_odd(5, 10)
     # sim = DipoleSim(1.1, 30, 30, 45, np.array([0, 0]), 0.08789, 0, 1.5)
     # p = load('dipoles_300K_ferro_5000000.txt')
-    # cool_down(np.arange(10, 1510, 10)[::-1], smoothing=5)
+    cool_down(4, np.arange(10, 1010, 10)[::-1], smoothing=10)
     # cool_down(np.arange(10, 30, 10)[::-1], smoothing=10)
     # sim = DipoleSim(a=1.1, c1=0.5, c2=0.7, layers=10, rows=30, columns=30,
     #                 temp0=10, dipole_strength=0.08789, orientations_num=3,
