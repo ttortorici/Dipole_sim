@@ -96,7 +96,7 @@ def calc_energy_decrease(dp, p_all, dr, r_sq, field, k_units):
     return energy_decrease
 
 
-@cuda.jit(device=True)
+# @cuda.jit(device=True)
 def calc_energy_decrease2(dp, p_all, dr, r_sq, field, k_units):
     p_dot_dp = np.sum(p_all * dp, axis=2)  # array: 2 x N
     r_dot_p = np.sum(p_all * dr, axis=2)  # array: 2 x N
@@ -105,6 +105,61 @@ def calc_energy_decrease2(dp, p_all, dr, r_sq, field, k_units):
     energy_decrease = np.sum((r_dot_dp * r_dot_p) * 3. / r_sq ** 2.5 - p_dot_dp / r_sq ** 1.5) * k_units
     energy_decrease += sum(field * dp)
     return energy_decrease
+
+
+def calc_energy(p_all, r, layers, c1, c2, N, N_total, E, k_units):
+    # arrange all the x- and y-values in 1 x l*N arrays
+    px = np.array([np.ravel(p_all[:, :, 0])])  # 1 x 2N
+    py = np.array([np.ravel(p_all[:, :, 1])])
+
+    # duplicate xy values of r into 1 x l*N arrays
+    rx = np.zeros((1, N_total))
+    ry = np.zeros((1, N_total))
+    for ll in range(layers):
+        rx[0, ll * N:(ll + 1) * N] = r[:, 0]
+        ry[0, ll * N:(ll + 1) * N] = r[:, 1]
+
+    # generate all dipoles dotted with other dipoles
+    p_dot_p = px.T * px + py.T * py  # 2N x 2N
+
+    # generate all distances between dipoles
+    dx = rx.T - rx
+    dy = ry.T - ry
+    r_sq = dx * dx + dy * dy  # NxN
+    # distance between layers
+    for ll in range(1, layers):
+        layer_diff_half = ll * .5
+        c1s = int(np.ceil(layer_diff_half))
+        c2s = int(layer_diff_half)
+        layer_distance = c1s * c1 + c2s * c2
+        layer_dist_sq = layer_distance * layer_distance
+        for kk in range(ll):
+            dd = ll - kk
+            start1 = (dd - 1) * N
+            end1 = dd * N
+            start2 = ll * N
+            end2 = (ll + 1) * N
+            r_sq[start1:end1, start2:end2] += layer_dist_sq
+            r_sq[start2:end2, start1:end2] += layer_dist_sq
+    r_sq[r_sq == 0] = np.inf  # this removes self energy
+
+    p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
+    energy_ext_neg = np.sum(E * p)
+    energy_int = np.sum(p_dot_p / r_sq ** 1.5)
+    energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
+    # need to divide by 2 to avoid double counting
+    return 0.5 * k_units * np.sum(energy_int) - energy_ext_neg
+
+
+@nb.njit()
+def calc_energy_numba(px, dx, py, dy, r_sq, E, k_units):
+    p_dot_p = px.T * px + py.T * py  # 2N x 2N
+    p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
+    energy_ext_neg = np.sum(E * p)
+    energy_int = np.sum(p_dot_p / r_sq ** 1.5)
+    energy_int = energy_int - np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
+    # need to divide by 2 to avoid double counting
+    return 0.5 * k_units * np.sum(energy_int) - energy_ext_neg
 
 
 if __name__ == "__main__":
@@ -121,7 +176,63 @@ if __name__ == "__main__":
 
     p, layer_distances, layer_orientation = gen_dipole_orientations(n, layers, o, False, False, 1., 1.)
 
-    trial_dipole = rng.integers(n)  # int
+    c1 = 1.
+    c2 = 1.2
+    N_total = n * layers
+
+    start = t()
+    print(calc_energy(p, r, layers, c1, c2, n, N_total, np.array([0, 0]), 1.))
+    print(t() - start)
+    start = t()
+
+    start = t()
+    for _ in range(1000):
+        calc_energy(p, r, layers, 1., 1.2, n, n*layers, np.array([0, 0]), 1.)
+    print(t() - start)
+
+    # arrange all the x- and y-values in 1 x l*N arrays
+    px = np.reshape(np.ravel(p[:, :, 0]), (1, N_total))  # 1 x 2N
+    py = np.reshape(np.ravel(p[:, :, 1]), (1, N_total))
+
+    # duplicate xy values of r into 1 x l*N arrays
+    rx = np.zeros((1, N_total))
+    ry = np.zeros((1, N_total))
+    for ll in range(layers):
+        rx[0, ll * n:(ll + 1) * n] = r[:, 0]
+        ry[0, ll * n:(ll + 1) * n] = r[:, 1]
+
+    # generate all dipoles dotted with other dipoles
+
+    # generate all distances between dipoles
+    dx = rx.T - rx
+    dy = ry.T - ry
+    r_sq = dx * dx + dy * dy  # NxN
+    # distance between layers
+    for ll in range(1, layers):
+        layer_diff_half = ll * .5
+        c1s = int(np.ceil(layer_diff_half))
+        c2s = int(layer_diff_half)
+        layer_distance = c1s * c1 + c2s * c2
+        layer_dist_sq = layer_distance * layer_distance
+        for kk in range(ll):
+            dd = ll - kk
+            start1 = (dd - 1) * n
+            end1 = dd * n
+            start2 = ll * n
+            end2 = (ll + 1) * n
+            r_sq[start1:end1, start2:end2] += layer_dist_sq
+            r_sq[start2:end2, start1:end2] += layer_dist_sq
+    r_sq[r_sq == 0] = np.inf  # this removes self energy
+
+    start = t()
+    print(calc_energy_numba(px, dx, py, r_sq, dy, np.array([0, 0]), 1.))
+    print(t() - start)
+    start = t()
+    for _ in range(1000):
+        calc_energy_numba(px, dx, py, r_sq, dy, np.array([0, 0]), 1.)
+    print(t() - start)
+
+    """trial_dipole = rng.integers(n)  # int
     trial_layer = rng.integers(layers)  # int
     layer_oddness = trial_layer & 1
 
@@ -152,7 +263,7 @@ if __name__ == "__main__":
         start = t()
         for _ in range(1000):
             calc_energy_decrease2(dp, p, dr, r_sq, np.array([0, 0]), 1.)
-        print(t() - start)
+        print(t() - start)"""
 
     # start = t()
     # for _ in range(1000):
