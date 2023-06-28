@@ -270,7 +270,7 @@ class DipoleSim:
         self.energy = self.calc_energy()
 
     @staticmethod
-    def gen_dipoles_triangular(a: float, rows: int, columns: int) -> np.ndarray:
+    def gen_lattice_triangular_rhombus(a: float, rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in triangular lattice in a rhombus
         :param a: spacing between dipoles in nm
@@ -278,36 +278,35 @@ class DipoleSim:
         :param columns: number of columns
         :return: position of dipoles
         """
-        x = 0.5 * a
-        y = a * np.sqrt(3) * 0.5
-        r = np.zeros((rows * columns, 2))
-        for jj in range(rows):
-            start = jj * rows
-            r[start:start + columns, 0] = np.arange(columns) * a + x * jj
-            r[start:start + columns, 1] = np.ones(columns) * y * jj
-        return r
+        r = np.empty((rows * columns, 2), dtype=float)
+        rx = np.tile(np.arange(columns, dtype=float), (rows, 1))
+        rx += np.reshape(np.arange(0, rows * 0.5, 0.5, dtype=float), (rows, 1))
+        rx = np.ravel(rx)
+        ry = np.ravel((np.ones((columns, 1)) * np.arange(rows)).T * (np.sqrt(3) * 0.5))
+        r[:, 0] = rx
+        r[:, 1] = ry
+        return r * a
 
     @staticmethod
-    def gen_dipoles_triangular2(a: float, rows: int, columns: int) -> np.ndarray:
+    def gen_lattice_triangular_square(a: float, rows: int, columns: int) -> np.ndarray:
         """
-        Generate the vectors of position for each dipole in a triangular lattice in a square
-        :param a: spacing between dipoles in nm
-        :param rows: number of rows
-        :param columns: number of columns
-        :return: position of dipoles
+        Create an array of r-vectors representing the triangular lattice.
+        :param a: Lattice parameter
+        :param rows: Number of rows
+        :param columns: Number of columns
+        :return: list of r vectors
         """
-        x = 0.5 * a
-        y = a * np.sqrt(3) * 0.5
-        r1 = np.arange(columns) * a
-        r1 = np.tile(r1, (rows, 1))
-        r1[1::2] += x
-        r1 = np.ravel(r1)
-        r2 = (np.ones((rows, 1)) * np.arange(columns)) * y
-        r2 = np.ravel(r2.T)
-        return np.column_stack((r1, r2))
+        r = np.empty((rows * columns, 2), dtype=float)
+        rx = np.tile(np.arange(columns, dtype=float), (rows, 1))
+        rx[1::2] += 0.5
+        rx = np.ravel(rx)
+        ry = np.ravel((np.ones((columns, 1)) * np.arange(rows)).T * np.sqrt(3) * 0.5)
+        r[:, 0] = rx
+        r[:, 1] = ry
+        return r * a
 
     @staticmethod
-    def gen_dipoles_square(a: float, rows: int, columns: int) -> np.ndarray:
+    def gen_lattice_square(a: float, rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in a square lattice
         :param a: spacing between dipoles in nm
@@ -315,12 +314,12 @@ class DipoleSim:
         :param columns: number of columns
         :return: position of dipoles
         """
-        r1 = np.arange(columns) * a
-        r1 = np.tile(r1, (rows, 1))
-        r1 = np.ravel(r1)
-        r2 = (np.ones((rows, 1)) * np.arange(columns)) * a
-        r2 = np.ravel(r2.T)
-        return np.column_stack((r1, r2))
+        r = np.empty((rows * columns, 2), dtype=float)
+        rx = np.ravel(np.tile(np.arange(columns), (rows, 1)))
+        ry = np.ravel((np.ones((rows, 1)) * np.arange(columns)).T)
+        r[:, 0] = rx
+        r[:, 1] = ry
+        return r * a
 
     def gen_dipole_orientations(self) -> np.ndarray:
         """
@@ -333,16 +332,17 @@ class DipoleSim:
         return p_directions
 
     @staticmethod
-    def create_ori_vec(orientations_num: int) -> np.ndarray:
+    def gen_possible_directions(orientations_num: int) -> np.ndarray:
         """
         Creates the basis vectors for possible directions
         :param orientations_num: number of possible directions
         :return: array of 2-long basis vectors
         """
-        del_theta = 2. * np.pi / orientations_num
-        orientations = np.zeros((orientations_num, 2))
-        for e in range(orientations_num):
-            orientations[e] = np.array([np.cos(del_theta * e), np.sin(del_theta * e)])
+        del_theta = 2 * np.pi / orientations_num
+        orientations = np.empty((orientations_num, 2))
+        args = np.arange(orientations_num) * del_theta
+        orientations[:, 0] = np.cos(args)
+        orientations[:, 1] = np.sin(args)
         return orientations
 
     def save_img(self, name=None):
