@@ -244,7 +244,7 @@ def calc_energy(px, py, rx, ry):
 
 if __name__ == "__main__":
     # sim = DipoleSim(1.1, 30, 30, 45, np.array([0, 0]), 0.08789, 0, 1.5)
-    p = np.loadtxt('dipoles_300K_ferro_5000000.txt')
+    p = np.loadtxt('../../dipoles_300K_ferro_5000000.txt')
     sim = DipoleSim(1.1, 30, 30, 300, 0.08789, 0, 1.5, p)
     sim.change_electric_field(np.array([0, 10]))
     # sim.save_img()

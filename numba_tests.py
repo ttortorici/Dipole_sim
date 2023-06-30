@@ -1,6 +1,8 @@
 import numba as nb
 from numba import cuda
 import numpy as np
+import random
+import functions.numba as nbf
 
 
 def gen_lattice(a: float, rows: int, columns: int) -> np.ndarray:
@@ -167,6 +169,175 @@ def calc_energy_numba(px, rx, py, ry, N_total, E, k_units):
     return k_units * (energy_int_3 - 3 * energy_int_5_neg) - energy_ext_neg
 
 
+def calc_distance(r, trial_location):
+    dr = r - r[trial_location]  # array: N x 2
+    return dr
+
+
+@nb.njit(fastmath=True)
+def calc_distance2(r, trial_location):
+    dr = r - r[trial_location]  # array: N x 2
+    return dr
+
+
+def calc_rsq(dr, trial_layer, layers):
+    r_sq = np.sum(dr * dr, axis=1)
+    return r_sq
+
+
+@nb.njit(fastmath=True)
+def calc_rsq2(dr, trial_layer, layers):
+    r_sq = np.sum(dr * dr, axis=1)
+    return r_sq
+
+def add(x, y):
+    return x+y
+
+@nb.njit(fastmath=True)
+def add2(x, y):
+    return x+y
+
+def beta(temperature):
+    return 1./(temperature*8.617e-5)
+
+@nb.njit(nb.float64(nb.float64), fastmath=True)
+def beta2(temperature):
+    return 1./(temperature*8.617e-5)
+
+
+def even_odd_replace(layers, N, c1, c2):
+    rz = np.zeros((layers, N))
+    for ll in range(1, layers):
+        if ll & 1:
+            rz[ll] = rz[ll - 1] + c1
+        else:
+            rz[ll] = rz[ll - 1] + c2
+    return rz
+
+@nb.njit(nb.float64[:, :](nb.int32, nb.int32, nb.float64, nb.float64), fastmath=True)
+def even_odd_replace2(layers, N, c1, c2):
+    rz = np.zeros((layers, N))
+    for ll in range(1, layers):
+        if ll & 1:
+            rz[ll] = rz[ll - 1] + c1
+        else:
+            rz[ll] = rz[ll - 1] + c2
+    return rz
+
+
+@nb.vectorize([nb.float64(nb.float64, nb.float64, nb.float64)])
+def calc_magnitude_2(x, y, z):
+    return x ** 2 + y ** 2 + z ** 2
+
+@nb.vectorize([nb.float64(nb.float64, nb.float64, nb.float64)])
+def calc_magnitude_3(x, y, z):
+    return x * x + y * y + z * z
+
+
+@nb.njit(nb.float64[:, :](nb.float64[:, :], nb.float64[:, :]), fastmath=True)
+def add_matrices(matrix1, matrix2):
+    """
+    Add two matrices together
+    :param matrix1: first matrix
+    :param matrix2: second matrix
+    :return: sum
+    """
+    return matrix1 + matrix2
+
+
+@nb.vectorize([nb.float64(nb.float64, nb.float64)])
+def vector_sum(v1, v2):
+    """
+    Add two matrices together
+    :param matrix1: first matrix
+    :param matrix2: second matrix
+    :return: sum
+    """
+    return v1 + v2
+
+
+@nb.vectorize([nb.float64(nb.float64, nb.float64)])
+def vector_multiply(v1, v2):
+    return v1 * v2
+
+
+@nb.vectorize([nb.float64(nb.float64, nb.float64)])
+def vector_divide_1_5(v1, v2):
+    return v1 / (v2 ** 1.5)
+
+
+@nb.njit(nb.float64(nb.float64[:], nb.float64[:], nb.float64[:], nb.int32), fastmath=True)
+def p_dot_p(px, py, r_sq, index):
+    return np.sum((px * px[index] + py * py[index]) / r_sq ** 1.5)
+
+@nb.njit(nb.float64(nb.float64[:]), fastmath=True)
+def fast_sum(x):
+    return np.sum(x)
+
+@nb.vectorize([nb.float64(nb.float64, nb.float64, nb.float64, nb.float64, nb.float64)], fastmath=True)
+def p_dot_p2(pxi, pxj, pyi, pyj, r_sq):
+    return (pxi * pxj + pyi * pyj) / r_sq ** 1.5
+
+
+@nb.njit(nb.float64(nb.float64[:], nb.float64[:], nb.float64[:], nb.float64[:], nb.float64[:], nb.int32), fastmath=True)
+def energy(px, py, dx, dy, r_sq, index):
+    pi_dot_pj = (px * px[index] + py * py[index]) / r_sq ** 1.5
+    pi_dot_dr = px * dx + py * dy
+    pj_dot_dr = px[index] * dx + py[index] * dy
+
+    term1 = np.sum(pi_dot_pj / r_sq ** 1.5)
+    term2 = np.sum(pi_dot_dr * pj_dot_dr / r_sq ** 2.5)
+
+    return term1 - 3. * term2
+
+@nb.njit(nb.float64(nb.float64[:], nb.float64[:], nb.float64[:], nb.float64[:], nb.float64[:], nb.int32), fastmath=True)
+def total_energy(px, py, rx, ry, rz, N_total):
+    energy = np.empty(N_total - 1)
+
+    for jj in range(N_total - 1):
+        dx = nbf.calc_distances_following(rx, jj)
+        dy = nbf.calc_distances_following(ry, jj)
+        dz = nbf.calc_distances_following(rz, jj)
+
+        r_sq = nbf.calc_magnitude_3(dx, dy, dz)
+
+        energy[jj] = nbf.calc_energy_of_dipole(px[jj + 1:], py[jj + 1:], dx, dy, r_sq, jj)
+    return np.sum(energy)
+
+@nb.njit(nb.float64(nb.float64[:], nb.float64[:], nb.float64[:], nb.float64[:], nb.float64[:], nb.int32), fastmath=True)
+def total_energy2(px, py, rx, ry, rz, N_total):
+    energy = 0
+
+    for jj in range(N_total - 1):
+        dx = nbf.calc_distances_following(rx, jj)
+        dy = nbf.calc_distances_following(ry, jj)
+        dz = nbf.calc_distances_following(rz, jj)
+
+        r_sq = nbf.calc_magnitude_3(dx, dy, dz)
+
+        energy += nbf.calc_energy_of_dipole(px[jj + 1:], py[jj + 1:], dx, dy, r_sq, jj)
+    return energy
+
+def total_energy3(px, py, rx, ry, n):
+    # generate all dipoles dotted with other dipoles
+    p_dot_p = px.T * px + py.T * py  # 2N x 2N
+
+    # generate all distances between dipoles
+    dx = rx.T - rx
+    dy = ry.T - ry
+    r_sq = dx * dx + dy * dy  # NxN
+    r_sq[self.N:, :self.N] += self.c_sq  # add interlayer distances
+    r_sq[:self.N, self.N:] += self.c_sq  # add interlayer distances
+    r_sq[r_sq == 0] = np.inf  # this removes self energy
+
+    p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
+    energy_ext_neg = np.sum(self.E * self.p)
+    energy_int = np.sum(p_dot_p / r_sq ** 1.5)
+    energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
+    # need to divide by 2 to avoid double counting
+    return 0.5 * self.k_units * np.sum(energy_int) - energy_ext_neg
+
+
 if __name__ == "__main__":
     from time import perf_counter as t
 
@@ -185,7 +356,41 @@ if __name__ == "__main__":
     c2 = 1.2
     N_total = n * layers
 
+    dr = calc_distance(r, rng.integers(n))
+
+    x = np.arange(100, dtype=float)
+    y = np.arange(100, dtype=float)
+    z = np.arange(100, dtype=float)
+    index = 12
+    r_sq = np.arange(1, 101, dtype=float)
+
     start = t()
+    # print(calc_magnitude_2(x, y, z))
+    total_energy(x, y, x, y, x, N_total)
+    print(t() - start)
+    start = t()
+
+    start = t()
+    for _ in range(100000):
+        total_energy(x, y, x, y, x, N_total)
+    print(t() - start)
+
+    start = t()
+    # print(calc_magnitude_2(x, y, z))
+    total_energy2(x, y, x, y, x, N_total)
+    print(t() - start)
+    start = t()
+
+    start = t()
+    for _ in range(100000):
+        total_energy2(x, y, x, y, x, N_total)
+    print(t() - start)
+
+
+
+
+
+    """start = t()
     print(calc_energy(p, r, layers, c1, c2, n, N_total, np.array([0, 0]), 1.))
     print(t() - start)
     start = t()
@@ -239,7 +444,7 @@ if __name__ == "__main__":
     start = t()
     for _ in range(1000):
         calc_energy_numba(px, rx, py, ry, N_total, np.array([0, 0]), 1.)
-    print(t() - start)
+    print(t() - start)"""
 
     """trial_dipole = rng.integers(n)  # int
     trial_layer = rng.integers(layers)  # int
