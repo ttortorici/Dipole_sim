@@ -318,24 +318,6 @@ def total_energy2(px, py, rx, ry, rz, N_total):
         energy += nbf.calc_energy_of_dipole(px[jj + 1:], py[jj + 1:], dx, dy, r_sq, jj)
     return energy
 
-def total_energy3(px, py, rx, ry, n):
-    # generate all dipoles dotted with other dipoles
-    p_dot_p = px.T * px + py.T * py  # 2N x 2N
-
-    # generate all distances between dipoles
-    dx = rx.T - rx
-    dy = ry.T - ry
-    r_sq = dx * dx + dy * dy  # NxN
-    r_sq[self.N:, :self.N] += self.c_sq  # add interlayer distances
-    r_sq[:self.N, self.N:] += self.c_sq  # add interlayer distances
-    r_sq[r_sq == 0] = np.inf  # this removes self energy
-
-    p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
-    energy_ext_neg = np.sum(self.E * self.p)
-    energy_int = np.sum(p_dot_p / r_sq ** 1.5)
-    energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
-    # need to divide by 2 to avoid double counting
-    return 0.5 * self.k_units * np.sum(energy_int) - energy_ext_neg
 
 
 if __name__ == "__main__":

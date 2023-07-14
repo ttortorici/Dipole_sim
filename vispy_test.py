@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import sys
 import itertools
 
@@ -80,3 +81,10 @@ if __name__ == '__main__':
 
     if sys.flags.interactive != 1:
         app.run()
+=======
+import vispy as vp
+import numpy as np
+
+data = np.zeros(4, dtype=[("position", np.float32, 2),
+                          ("color", np.float32, 4)])
+>>>>>>> Stashed changes

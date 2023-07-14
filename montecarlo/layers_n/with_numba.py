@@ -137,10 +137,22 @@ class DipoleSim:
         return energy
 
     def calc_polarization(self):
-        """
-        :return: net dipole moment per unit volume
-        """
-        return np.sqrt(np.sum(np.sum(self.p, axis=(0, 1)) ** 2)) / self.volume
+        return nbf.calc_polarization_total(self.p, self.volume)
+
+    def calc_polarization_per_layer(self):
+        return nbf.calc_polarization_per_layer(self.p, self.volume)
+
+    def calc_polarization_x(self):
+        return nbf.calc_polarization_x(self.p, self.volume)
+
+    def calc_polarization_per_layer_x(self):
+        return nbf.calc_polarization_per_layer_x(self.p, self.volume)
+
+    def calc_polarization_y(self):
+        return nbf.calc_polarization_y(self.p, self.volume)
+
+    def calc_polarization_per_layer_y(self):
+        return nbf.calc_polarization_per_layer_y(self.p, self.volume)
 
     def step(self):
         """
