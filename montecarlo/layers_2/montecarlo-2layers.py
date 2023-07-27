@@ -13,22 +13,21 @@ class DipoleSim:
     eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
     boltzmann = 8.617e-5  # eV / K
 
-    def __init__(self, a: float, c: float, rows: int, columns: int, temp0, dipole_strength: float,
+    def __init__(self, a: float, c: float, rows: int, columns: int, temp0,
                  orientations_num: int = 0, eps_rel: float = 1.5, lattice: str = "t", p0=None):
         """
         Monte Carlo
-        :param a: lattice spacing in nm
-        :param c: layer spacing in nm
+        :param a: lattice spacing in Angstrom
+        :param c: layer spacing in Angstrom
         :param rows: number of rows of dipoles
         :param columns: number of columns of dipoles
         :param temp0: initial temperature
-        :param dipole_strength: dipole_strength in (electron charge) * nm
         :param orientations_num: number of possible orientations (if zero, sets to 3)
         :param eps_rel: relative dielectric constant of surroundings
         """
         self.rng = np.random.default_rng()
 
-        self.odd = bool(round(2. * c) % 2)
+        self.odd = bool(round(0.2 * c) % 2)
         if self.odd:
             print("odd")
         else:

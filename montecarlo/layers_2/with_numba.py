@@ -1,21 +1,13 @@
 import numpy as np
 import matplotlib.pylab as plt
-import random
 import os
 import functions.numba as nbf
 
 
-# a = 1.1  # nm
-# dipole_strength = 0.08789  # electron charge - nm
-# eps_rel = 1.5
-
-
 class DipoleSim:
-    eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
-    boltzmann = 8.617e-5  # eV / K
 
-    def __init__(self, a: float, c: float, rows: int, columns: int, temp0,
-                 orientations_num: int = 0, lattice: str = "t", p0=None):
+    def __init__(self, a: float, c: float, rows: int, columns: int, temp0: float, dipole_strength: float,
+                 orientations_num: int = 0, eps_rel: float = 1.5, lattice: str = "t", p0=None):
         """
         Monte Carlo
         :param a: lattice spacing in nm
@@ -23,35 +15,35 @@ class DipoleSim:
         :param rows: number of rows of dipoles
         :param columns: number of columns of dipoles
         :param temp0: initial temperature
+        :param dipole_strength: in Debye
         :param orientations_num: number of possible orientations (if zero, sets to 3)
+        :param eps_rel: relative dielectric constant of environment
+        :param lattice: type of lattice
         """
         self.rng = np.random.default_rng()
 
-        self.volume = a * rows * a * columns * c * 2
+        self.boltzmann = 1.38e6 * eps_rel * c ** 3 / dipole_strength ** 2   # in units of p^2 / 4pi eps0 eps c^3
 
-        self.odd = bool(round(2. * c) % 2)
+        self.volume = 0.5 * np.sqrt(3) * rows * columns * a * a / (c * c)   # in units of c^3
+
+        self.odd = bool(round(2. * c) & 1)
         if self.odd:
             print("odd")
         else:
             print("even")
 
         # set units
-        self.beta = 1. / (DipoleSim.boltzmann * temp0)
-        self.E = np.zeros(2)
+        self.beta = 1. / (self.boltzmann * temp0)
+        self.E = np.zeros(2)        # in units of p / 4pi eps0 eps c^3
 
         # store layer constant
         self.c_sq = c * c
 
         self.orientations_num = orientations_num
-        self.orientations = self.create_ori_vec(orientations_num) * dipole_strength
-        if "t" in lattice.lower():
-            if "2" in lattice:
-                self.r = self.gen_dipoles_triangular2(a, columns, rows)
-            else:
-                self.r = self.gen_dipoles_triangular(a, columns, rows)
-        else:
-            self.r = self.gen_dipoles_square(a, columns, rows)
-        # self.rows = rows
+        self.orientations = self.create_ori_vec(orientations_num)
+
+        self.r = self.set_lattice(rows, columns, lattice)
+
         self.columns = columns
         self.N = columns * rows
         self.N_total = self.N * 2
@@ -62,9 +54,50 @@ class DipoleSim:
         self.img_num = 0
         self.accepted = 0
 
+        self.energy = self.calc_energy()
         # self.calculate_energy_per_dipole()
 
     def calc_energy(self):
+        """
+
+        :return:
+        """
+        # arrange all the x- and y-values in 1 x 2N arrays
+        px = np.array([np.ravel(self.p[:, :, 0])])  # 1 x 2N
+        py = np.array([np.ravel(self.p[:, :, 1])])
+
+        # duplicate xy values of r into 1 x 2N arrays
+        rx = np.tile(self.r[:, 0], (self.layers, 1))
+        ry = np.tile(self.r[:, 1], (self.layers, 1))
+        rz = np.zeros((self.layers, self.N))
+        for ll in range(1, self.layers):
+            if ll & 1:  # if odd
+                rz[ll] = rz[ll - 1] + self.c1
+            else:
+                rz[ll] = rz[ll - 1] + self.c2
+
+        rx = np.array([np.ravel(rx)])
+        ry = np.array([np.ravel(ry)])
+        rz = np.array([np.ravel(rz)])
+
+        # generate all dipoles dotted with other dipoles
+        p_dot_p = px.T * px + py.T * py  # 2N x 2N
+
+        # generate all distances between dipoles
+        dx = rx.T - rx
+        dy = ry.T - ry
+        dz = rz.T - rz
+        r_sq = dx * dx + dy * dy + dz * dz  # NxN
+        r_sq[r_sq == 0] = np.inf  # this removes self energy
+
+        p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
+        energy_ext_neg = np.sum(self.E * self.p)
+        energy_int = np.sum(p_dot_p / r_sq ** 1.5)
+        energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
+        # need to divide by 2 to avoid double counting
+        return 0.5 np.sum(energy_int) - energy_ext_neg
+
+    def calc_energy2(self):
         # arrange all the x- and y-values in 1 x 2N arrays
         px = np.array([np.ravel(self.p[:, :, 0])])  # 1 x 2N
         py = np.array([np.ravel(self.p[:, :, 1])])
@@ -165,55 +198,63 @@ class DipoleSim:
         self.p = self.gen_dipole_orientations()
 
     @staticmethod
-    def gen_dipoles_triangular(a: float, rows: int, columns: int) -> np.ndarray:
+    def set_lattice(rows, columns, lattice_type):
+        if "t" in lattice_type.lower():
+            if "2" in lattice_type:
+                r = DipoleSim.gen_lattice_triangular_square(columns, rows)
+            else:
+                r = DipoleSim.gen_lattice_triangular_rhombus(columns, rows)
+        else:
+            r = DipoleSim.gen_lattice_square(columns, rows)
+        return r
+
+    @staticmethod
+    def gen_lattice_triangular_rhombus(rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in triangular lattice in a rhombus
-        :param a: spacing between dipoles in nm
         :param rows: number of rows
         :param columns: number of columns
         :return: position of dipoles
         """
-        x = 0.5 * a
-        y = a * np.sqrt(3) * 0.5
-        r = np.zeros((rows * columns, 2))
-        for jj in range(rows):
-            start = jj * rows
-            r[start:start + columns, 0] = np.arange(columns) * a + x * jj
-            r[start:start + columns, 1] = np.ones(columns) * y * jj
+        r = np.empty((rows * columns, 2), dtype=float)
+        rx = np.tile(np.arange(columns, dtype=float), (rows, 1))
+        rx += np.reshape(np.arange(0, rows * 0.5, 0.5, dtype=float), (rows, 1))
+        rx = np.ravel(rx)
+        ry = np.ravel((np.ones((columns, 1)) * np.arange(rows)).T * (np.sqrt(3) * 0.5))
+        r[:, 0] = rx
+        r[:, 1] = ry
         return r
 
     @staticmethod
-    def gen_dipoles_triangular2(a: float, rows: int, columns: int) -> np.ndarray:
+    def gen_lattice_triangular_square(rows: int, columns: int) -> np.ndarray:
         """
-        Generate the vectors of position for each dipole in a triangular lattice in a square
-        :param a: spacing between dipoles in nm
-        :param rows: number of rows
-        :param columns: number of columns
-        :return: position of dipoles
+        Create an array of r-vectors representing the triangular lattice.
+        :param rows: Number of rows
+        :param columns: Number of columns
+        :return: list of r vectors
         """
-        x = 0.5 * a
-        y = a * np.sqrt(3) * 0.5
-        r = np.zeros((rows * columns, 2))
-        for jj in range(rows):
-            start = jj * rows
-            r[start:start + columns, 0] = np.arange(columns) * a + x * (jj % 2)
-            r[start:start + columns, 1] = np.ones(columns) * y * jj
+        r = np.empty((rows * columns, 2), dtype=float)
+        rx = np.tile(np.arange(columns, dtype=float), (rows, 1))
+        rx[1::2] += 0.5
+        rx = np.ravel(rx)
+        ry = np.ravel((np.ones((columns, 1)) * np.arange(rows)).T * np.sqrt(3) * 0.5)
+        r[:, 0] = rx
+        r[:, 1] = ry
         return r
 
     @staticmethod
-    def gen_dipoles_square(a: float, rows: int, columns: int) -> np.ndarray:
+    def gen_lattice_square(rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in a square lattice
-        :param a: spacing between dipoles in nm
         :param rows: number of rows
         :param columns: number of columns
         :return: position of dipoles
         """
-        r = np.zeros((rows * columns, 2))
-        for jj in range(rows):
-            start = jj * rows
-            r[start:start + columns, 0] = np.arange(columns) * a
-            r[start:start + columns, 1] = np.ones(columns) * a * jj
+        r = np.empty((rows * columns, 2), dtype=float)
+        rx = np.ravel(np.tile(np.arange(columns), (rows, 1)))
+        ry = np.ravel((np.ones((rows, 1)) * np.arange(columns)).T)
+        r[:, 0] = rx
+        r[:, 1] = ry
         return r
 
     def gen_dipole_orientations(self) -> np.ndarray:
