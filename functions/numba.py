@@ -133,6 +133,18 @@ def add_matrices(matrix1: np.ndarray,
     return matrix1 + matrix2
 
 
+@nb.njit(nb.float64[:, :](nb.float64[:, :], nb.float64), fastmath=True)
+def add_to_row(matrix: np.ndarray, number: float) -> np.ndarray:
+    """
+    Add a number to the elements of the second row of a matrix
+    :param matrix:
+    :param number:
+    :return:
+    """
+    matrix[1, :] += number
+    return matrix
+
+
 @nb.njit(nb.float64(nb.float64[:], nb.float64[:, :, :], nb.float64[:, :], nb.float64[:, :], nb.float64[:], nb.float64))
 def calc_energy_decrease(dp: np.ndarray,
                          p_all: np.ndarray,
@@ -155,6 +167,30 @@ def calc_energy_decrease(dp: np.ndarray,
     r_dot_dp = np.sum(dr * dp, axis=1)  # array: N
     # energy_decrease is positive if the energy goes down and negative if it goes up
     energy_decrease = np.sum((r_dot_dp * r_dot_p) * 3. / r_sq ** 2.5 - p_dot_dp / r_sq ** 1.5) * k_units
+    energy_decrease += sum(field * dp)
+    return energy_decrease
+
+
+@nb.njit(nb.float64(nb.float64[:], nb.float64[:, :, :], nb.float64[:, :], nb.float64[:, :], nb.float64[:]))
+def calc_energy_decrease2(dp: np.ndarray,
+                         p_all: np.ndarray,
+                         dr: np.ndarray,
+                         r_sq: np.ndarray,
+                         field: np.ndarray) -> float:
+    """
+    Calculate the amount the energy decreases if a dipole changes by amount dp.
+    :param dp: change in dipole moment.
+    :param p_all: all the dipole moments.
+    :param dr: distance of changed dipole to other dipoles.
+    :param r_sq: square magnitude of distance vectors.
+    :param field: vector representing the external electric field
+    :return: The amount of energy decreased in eV
+    """
+    p_dot_dp = np.sum(p_all * dp, axis=2)  # array: 2 x N
+    r_dot_p = np.sum(p_all * dr, axis=2)  # array: 2 x N
+    r_dot_dp = np.sum(dr * dp, axis=1)  # array: N
+    # energy_decrease is positive if the energy goes down and negative if it goes up
+    energy_decrease = np.sum((r_dot_dp * r_dot_p) * 3. / r_sq ** 2.5 - p_dot_dp / r_sq ** 1.5)
     energy_decrease += sum(field * dp)
     return energy_decrease
 
@@ -247,6 +283,72 @@ def calc_polarization_per_layer_y(p, volume):
     return 0.1602 * np.sum(p[:, :, 1], axis=1) / volume
 
 
+@nb.njit(nb.float64(nb.float64[:, :, :], nb.float64), fastmath=True)
+def calc_polarization_total2(p, volume_per_dipole):
+    """
+    Calculate polarization in units of p/c^3
+    :param p: all the dipole moments (layers, number per layer, xy)
+    :param volume_per_dipole: in c^3
+    :return: net polarization
+    """
+    return np.sqrt(np.sum(np.sum(np.sum(p, axis=0), axis=0) ** 2)) / volume_per_dipole
+
+
+@nb.njit(nb.float64[:](nb.float64[:, :, :], nb.float64), fastmath=True)
+def calc_polarization_per_layer2(p, volume_per_dipole):
+    """
+    Calculate polarization in units of p/c^3
+    :param p: all the dipole moments (layers, number per layer, xy)
+    :param volume_per_dipole: in c^3
+    :return: net polarization in each layer
+    """
+    return np.sqrt(np.sum(np.sum(p, axis=1) ** 2, axis=1)) / volume_per_dipole
+
+
+@nb.njit(nb.float64(nb.float64[:, :, :], nb.float64), fastmath=True)
+def calc_polarization_x2(p, volume_per_dipole):
+    """
+    Calculate polarization in units of p/c^3
+    :param p: all the dipole moments (layers, number per layer, xy)
+    :param volume_per_dipole: in c^3
+    :return: net polarization in the x direction
+    """
+    return np.sum(p[:, :, 0]) / volume_per_dipole
+
+
+@nb.njit(nb.float64(nb.float64[:, :, :], nb.float64), fastmath=True)
+def calc_polarization_y2(p, volume_per_dipole):
+    """
+    Calculate polarization in units of p/c^3
+    :param p: all the dipole moments (layers, number per layer, xy)
+    :param volume_per_dipole: in c^3
+    :return: net polarization in the x direction
+    """
+    return np.sum(p[:, :, 1]) / volume_per_dipole
+
+
+@nb.njit(nb.float64[:](nb.float64[:, :, :], nb.float64), fastmath=True)
+def calc_polarization_per_layer_x2(p, volume_per_dipole):
+    """
+    Calculate polarization in units of p/c^2
+    :param p: all the dipole moments (layers, number per layer, xy)
+    :param volume_per_dipole: in c^3
+    :return: net polarization in the x direction in each layer
+    """
+    return np.sum(p[:, :, 0], axis=1) / volume_per_dipole
+
+
+@nb.njit(nb.float64[:](nb.float64[:, :, :], nb.float64), fastmath=True)
+def calc_polarization_per_layer_y2(p, volume_per_dipole):
+    """
+    Calculate polarization in units of p/c^3
+    :param p: all the dipole moments (layers, number per layer, xy)
+    :param volume_per_dipole: in c^3
+    :return: net polarization in the x direction in each layer
+    """
+    return np.sum(p[:, :, 1], axis=1) / volume_per_dipole
+
+
 @nb.njit(nb.float64[:, :](nb.float64[:, :], nb.float64, nb.int32, nb.int32), fastmath=True)
 def calc_rsq_2layer(distances, square_distance_between_layers, trial_layer, number_of_dipoles):
     """
@@ -263,7 +365,7 @@ def calc_rsq_2layer(distances, square_distance_between_layers, trial_layer, numb
     return r_sq
 
 
-nb.njit(nb.float64[:](nb.float64[:], nb.int32), fastmath=True)
+@nb.njit(nb.float64[:](nb.float64[:], nb.int32), fastmath=True)
 def average_and_std(array_to_average, length):
     ave = np.sum(array_to_average) / length
     std = np.sqrt(np.sum((array_to_average - ave) ** 2) / length)

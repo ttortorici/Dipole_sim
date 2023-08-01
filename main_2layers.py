@@ -5,15 +5,15 @@ import functions.numba as nbf
 
 
 def run_over_even_and_odd(temperature: float, times: int):
-    for c, oddness in zip((.55, .77), ("odd", "even")):
-        sim = DipoleSim(a=1.1, c=c, rows=30, columns=30,
-                        temp0=temperature, dipole_strength=0.08789,
-                        orientations_num=3, eps_rel=1.5,
+    for c, oddness in zip((5, 10), ("odd", "even")):
+        sim = DipoleSim(a=11, c=c, rows=30, columns=30,
+                        temp0=temperature,
+                        orientations_num=3,
                         lattice="t2")
         # sim.change_electric_field(np.array([0, 10]))
         # sim.save_img()
         for ii in range(times):
-            for _ in range(1):
+            for _ in range(20):
                 sim.run_over_system()
             sim.save_img()
             print(ii)
@@ -21,7 +21,7 @@ def run_over_even_and_odd(temperature: float, times: int):
 
 
 def cool_down(temperatures, smoothing=None):
-    for c, oddness in zip((.5, 1.), ("odd", "even")):
+    for c, oddness in zip((5, 10), ("odd", "even")):
         energies = np.empty(len(temperatures))
         p_total = np.copy(energies)
         p_1 = np.copy(energies)
@@ -43,9 +43,9 @@ def cool_down(temperatures, smoothing=None):
             p_yt_std = np.copy(energies)
             p_y1_std = np.copy(energies)
             p_y2_std = np.copy(energies)
-        sim = DipoleSim(a=1.1, c=c, rows=30, columns=30,
-                        temp0=temperatures[0], dipole_strength=0.08789,
-                        orientations_num=3, eps_rel=1.5,
+        sim = DipoleSim(a=11, c=c, rows=30, columns=30,
+                        temp0=temperatures[0],
+                        orientations_num=3,
                         lattice="t2")
         for ii, temperature in enumerate(temperatures):
             t_string = f"{temperature} K"
@@ -135,5 +135,6 @@ def cool_down(temperatures, smoothing=None):
 if __name__ == "__main__":
     # sim = DipoleSim(1.1, 30, 30, 45, np.array([0, 0]), 0.08789, 0, 1.5)
     # p = load('dipoles_300K_ferro_5000000.txt')
-    cool_down(np.arange(1, 621, 10)[::-1], smoothing=15)
+    cool_down(np.concatenate((np.arange(.5, 20, .5)[::-1], np.arange(.05, 0.5, .05)[::-1])), smoothing=5)
     # cool_down(np.arange(10, 30, 10)[::-1], smoothing=10)
+    # run_over_even_and_odd(5, 10)

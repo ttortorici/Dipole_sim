@@ -7,13 +7,14 @@ import os
 # dipole_strength = 0.08789  # electron charge - nm
 # eps_rel = 1.5
 
-eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
-boltzmann = 8.617e-5  # eV / K
+# eps0 = 0.0552713  # (electron charge)^2 / (eV - nm)
+# boltzmann = 8.617e-5  # eV / K
 
 
 class DipoleSim:
-    def __init__(self, a: float, rows: int, columns: int, temp0,
-                 dipole_strength: float, orientations_num: int = 0, eps_rel: float = 1., p0=None):
+    def __init__(self, # a: float,
+                 rows: int, columns: int, temp0,  # dipole_strength: float,
+                 orientations_num: int = 0, eps_rel: float = 1., p0=None):
         """
         Monte Carlo
         :param a: lattice spacing in nm
@@ -25,12 +26,14 @@ class DipoleSim:
         :param eps_rel: relative dielectric constant of surroundings
         """
         # set units
-        self.k_units = 0.25 / (np.pi * eps0 * eps_rel)
-        self.beta = 1. / (boltzmann * temp0)
-        self.E = np.array([0, 0])
+        # self.k_units = 0.25 / (np.pi * eps0 * eps_rel)
+        # self.beta = 1. / (boltzmann * temp0)
+        self.beta = 1. / temp0
+        self.E = np.zeros(2)
 
-        self.orientations = self.create_ori_vec(orientations_num) * dipole_strength
-        self.r = self.gen_dipoles(a, columns, rows)
+        self.orientations = self.create_ori_vec(orientations_num)  # * dipole_strength
+        self.r = self.gen_dipoles(# a,
+            columns, rows)
         self.rows = rows
         self.columns = columns
         self.N = columns * rows
@@ -43,6 +46,10 @@ class DipoleSim:
         self.energy = 0
 
         self.calculate_energy_per_dipole()
+
+    def run(self, full_steps):
+        for ii in range(self.N * full_steps):
+            self.step()
 
     def step(self):
         """
@@ -57,7 +64,9 @@ class DipoleSim:
             r_sq[r_sq == 0] = np.inf
             p_dot_p = np.sum(trial_p * self.p, 1)
             p_dot_r = np.sum(trial_p * dr, 1) * np.sum(self.p * dr, 1)
-            trial_energy = self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
+            # trial_energy = self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
+            #                - np.sum(self.E * trial_p)
+            trial_energy = np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
                            - np.sum(self.E * trial_p)
             if random.random() < np.exp(-self.beta * (trial_energy - self.energy)):
                 self.accepted += 1
@@ -80,7 +89,9 @@ class DipoleSim:
             r_sq[r_sq == 0] = np.inf
             p_dot_p = np.sum(trial_p * self.p, 1)
             p_dot_r = np.sum(trial_p * dr, 1) * np.sum(self.p * dr, 1)
-            trial_energy = self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
+            # trial_energy = self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
+            #                - np.sum(self.E * trial_p)
+            trial_energy = np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5) \
                            - np.sum(self.E * trial_p)
             if random.random() < np.exp(-self.beta * (trial_energy - self.energy)):
                 self.accepted += 1
@@ -108,7 +119,8 @@ class DipoleSim:
         r_sq[r_sq == 0] = np.inf
         p_dot_p = np.sum(self.p[dipole_ind] * self.p, 1)
         p_dot_r = np.sum(self.p[dipole_ind] * dr, 1) * np.sum(self.p * dr, 1)
-        return self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5)
+        # return self.k_units * np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5)
+        return np.sum(p_dot_p / r_sq ** 1.5 - 3. * p_dot_r / r_sq ** 2.5)
 
     def calculate_energy_per_dipole(self) -> float:
         """
@@ -134,7 +146,7 @@ class DipoleSim:
         Change the current temperature of the system
         :param temperature:
         """
-        self.beta = 1. / (boltzmann * temperature)
+        self.beta = 1. / temperature
 
     def change_electric_field(self, new_field: np.ndarray):
         """
@@ -148,10 +160,11 @@ class DipoleSim:
         Get the current temperature
         :return: current system temperature in K
         """
-        return 1. / (boltzmann * self.beta)
+        return 1. / self.beta
 
     @staticmethod
-    def gen_dipoles(a: float, width: int, height: int) -> np.ndarray:
+    def gen_dipoles(# a: float,
+                    width: int, height: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole
         :param a: spacing between dipoles in nm
@@ -160,12 +173,13 @@ class DipoleSim:
         :return: array of 2-vectors representing position of dipoles
         """
         sqrt3half = np.sqrt(3) * 0.5
-        x = 0.5 * a
-        y = a * sqrt3half
+        x = 0.5  # * a
+        y = sqrt3half  # * a
         r = np.zeros((width * height, 2))
         for jj in range(height):
             start = jj * height
-            r[start:start + width, :] = np.stack((np.arange(width) * a + x * jj, np.ones(width) * y * jj), 1)
+            r[start:start + width, :] = np.stack((np.arange(width)  # * a
+                                                  + x * jj, np.ones(width) * y * jj), 1)
         return r
 
     def gen_orientations(self, dipole_num: int, orientation_num: int) -> np.ndarray:
@@ -190,7 +204,7 @@ class DipoleSim:
         """
         if orientations_num:
             del_theta = 2 * np.pi / orientations_num
-            orientations = np.zeros(orientations_num, 2)
+            orientations = np.zeros((orientations_num, 2))
             for e in range(orientations_num):
                 orientations[e] = np.array([np.cos(del_theta * e), np.sin(del_theta * e)])
         else:
@@ -213,22 +227,22 @@ class DipoleSim:
         plt.close()
         self.img_num += 1
 
-
-def calc_energy(px, py, rx, ry):
-    px = np.array([px])
-    py = np.array([py])
-    rx = np.array([rx])
-    ry = np.array([ry])
-    p_dot_p = np.matmul(px.transpose(), px) + np.matmul(py.transpose(), py)
-    rx_diff = np.subtract(rx.transpose(), rx)
-    ry_diff = np.subtract(ry.transpose(), ry)
-    r_sq = rx_diff ** 2 + ry_diff ** 2
-    r_sq[r_sq == 0] = np.inf
-    p_dot_r = (px.transpose() * rx_diff + py.transpose() * ry_diff) * (px * rx_diff + py * ry_diff)
-    energy_1 = np.sum(p_dot_p / r_sq ** 1.5)
-    energy_2 = 3 * np.sum(p_dot_r / r_sq ** 2.5)
-    # energy = 0.25 / (np.pi * eps0) * np.sum(energy_matrix)
-    return 0.125 / (np.pi * eps0) * (energy_1 - energy_2)
+    def calc_energy(self):
+        px = np.array([self.p[:, 0]])
+        py = np.array([self.p[:, 1]])
+        rx = np.array([self.r[:, 0]])
+        ry = np.array([self.r[:, 1]])
+        p_dot_p = np.matmul(px.transpose(), px) + np.matmul(py.transpose(), py)
+        rx_diff = np.subtract(rx.transpose(), rx)
+        ry_diff = np.subtract(ry.transpose(), ry)
+        r_sq = rx_diff ** 2 + ry_diff ** 2
+        r_sq[r_sq == 0] = np.inf
+        p_dot_r = (px.transpose() * rx_diff + py.transpose() * ry_diff) * (px * rx_diff + py * ry_diff)
+        energy_1 = np.sum(p_dot_p / r_sq ** 1.5)
+        energy_2 = 3 * np.sum(p_dot_r / r_sq ** 2.5)
+        # energy = 0.25 / (np.pi * eps0) * np.sum(energy_matrix)
+        # return 0.125 / (np.pi * eps0) * (energy_1 - energy_2)
+        return (energy_1 - energy_2) / self.N
 
 
 """def calc_energy2(px, py, rx, ry):

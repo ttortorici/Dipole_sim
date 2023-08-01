@@ -43,8 +43,8 @@ def calculate_energy_vec(electric_field):
                 if not ii == jj:
                     dist_vec = r[ii] - r[jj]
                     dist_sq = sum(dist_vec * dist_vec)
-                    print(f"r^3 = {dist_sq ** 1.5}")
-                    print(f"r^5 = {dist_sq ** 2.5}")
+                    #print(f"r^3 = {dist_sq ** 1.5}")
+                    #print(f"r^5 = {dist_sq ** 2.5}")
                     energy_int += np.dot(p[jj], p[ii]) / dist_sq ** 1.5 - 3 * np.dot(p[ii], dist_vec) * np.dot(p[jj], dist_vec) / dist_sq ** 2.5
             energy_ext += np.dot(p[ii], electric_field)
         energy_vec[counter] = 0.5 * k_un * energy_int - energy_ext

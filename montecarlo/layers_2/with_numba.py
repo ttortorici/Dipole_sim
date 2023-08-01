@@ -6,8 +6,8 @@ import functions.numba as nbf
 
 class DipoleSim:
 
-    def __init__(self, a: float, c: float, rows: int, columns: int, temp0: float, dipole_strength: float,
-                 orientations_num: int = 0, eps_rel: float = 1.5, lattice: str = "t", p0=None):
+    def __init__(self, a: float, c: float, rows: int, columns: int, temp0: float,
+                 orientations_num: int = 0, lattice: str = "t", p0=None):
         """
         Monte Carlo
         :param a: lattice spacing in nm
@@ -22,27 +22,28 @@ class DipoleSim:
         """
         self.rng = np.random.default_rng()
 
-        self.boltzmann = 1.38e6 * eps_rel * c ** 3 / dipole_strength ** 2   # in units of p^2 / 4pi eps0 eps c^3
+        self.a_c_conv = a / c
 
-        self.volume = 0.5 * np.sqrt(3) * rows * columns * a * a / (c * c)   # in units of c^3
+        self.volume_per_dipole = 0.5 * np.sqrt(3) * self.a_c_conv * self.a_c_conv   # in units of c^3
 
-        self.odd = bool(round(2. * c) & 1)
+        self.odd = bool(round(.2 * c) & 1)
         if self.odd:
             print("odd")
         else:
             print("even")
 
         # set units
-        self.beta = 1. / (self.boltzmann * temp0)
+        self.temperature = 1. / temp0
         self.E = np.zeros(2)        # in units of p / 4pi eps0 eps c^3
 
-        # store layer constant
-        self.c_sq = c * c
+        # layer constant is 1 in units of c
+        # self.c_sq = c * c
 
         self.orientations_num = orientations_num
         self.orientations = self.create_ori_vec(orientations_num)
 
         self.r = self.set_lattice(rows, columns, lattice)
+        self.r *= self.a_c_conv     # units of c
 
         self.columns = columns
         self.N = columns * rows
@@ -67,14 +68,9 @@ class DipoleSim:
         py = np.array([np.ravel(self.p[:, :, 1])])
 
         # duplicate xy values of r into 1 x 2N arrays
-        rx = np.tile(self.r[:, 0], (self.layers, 1))
-        ry = np.tile(self.r[:, 1], (self.layers, 1))
-        rz = np.zeros((self.layers, self.N))
-        for ll in range(1, self.layers):
-            if ll & 1:  # if odd
-                rz[ll] = rz[ll - 1] + self.c1
-            else:
-                rz[ll] = rz[ll - 1] + self.c2
+        rx = np.tile(self.r[:, 0], (2, 1))
+        ry = np.tile(self.r[:, 1], (2, 1))
+        rz = np.vstack((np.zeros(self.N), np.ones(self.N)))
 
         rx = np.array([np.ravel(rx)])
         ry = np.array([np.ravel(ry)])
@@ -95,38 +91,38 @@ class DipoleSim:
         energy_int = np.sum(p_dot_p / r_sq ** 1.5)
         energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
         # need to divide by 2 to avoid double counting
-        return 0.5 np.sum(energy_int) - energy_ext_neg
+        return 0.5 * np.sum(energy_int) - energy_ext_neg
 
-    def calc_energy2(self):
-        # arrange all the x- and y-values in 1 x 2N arrays
-        px = np.array([np.ravel(self.p[:, :, 0])])  # 1 x 2N
-        py = np.array([np.ravel(self.p[:, :, 1])])
+    # def calc_energy2(self):
+    #     # arrange all the x- and y-values in 1 x 2N arrays
+    #     px = np.array([np.ravel(self.p[:, :, 0])])  # 1 x 2N
+    #     py = np.array([np.ravel(self.p[:, :, 1])])
 
-        # duplicate xy values of r into 1 x 2N arrays
-        rx = np.zeros((1, self.N_total))
-        ry = np.zeros((1, self.N_total))
-        rx[0, :self.N] = self.r[:, 0]
-        rx[0, self.N:] = self.r[:, 0]
-        ry[0, :self.N] = self.r[:, 1]
-        ry[0, self.N:] = self.r[:, 1]
+    #     # duplicate xy values of r into 1 x 2N arrays
+    #     rx = np.zeros((1, self.N_total))
+    #     ry = np.zeros((1, self.N_total))
+    #     rx[0, :self.N] = self.r[:, 0]
+    #     rx[0, self.N:] = self.r[:, 0]
+    #     ry[0, :self.N] = self.r[:, 1]
+    #     ry[0, self.N:] = self.r[:, 1]
 
-        # generate all dipoles dotted with other dipoles
-        p_dot_p = px.T * px + py.T * py  # 2N x 2N
+    #     # generate all dipoles dotted with other dipoles
+    #     p_dot_p = px.T * px + py.T * py  # 2N x 2N
 
-        # generate all distances between dipoles
-        dx = rx.T - rx
-        dy = ry.T - ry
-        r_sq = dx * dx + dy * dy  # NxN
-        r_sq[self.N:, :self.N] += self.c_sq  # add interlayer distances
-        r_sq[:self.N, self.N:] += self.c_sq  # add interlayer distances
-        r_sq[r_sq == 0] = np.inf  # this removes self energy
+    #     # generate all distances between dipoles
+    #     dx = rx.T - rx
+    #     dy = ry.T - ry
+    #     r_sq = dx * dx + dy * dy  # NxN
+    #     r_sq[self.N:, :self.N] += self.c_sq  # add interlayer distances
+    #     r_sq[:self.N, self.N:] += self.c_sq  # add interlayer distances
+    #     r_sq[r_sq == 0] = np.inf  # this removes self energy
 
-        p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
-        energy_ext_neg = np.sum(self.E * self.p)
-        energy_int = np.sum(p_dot_p / r_sq ** 1.5)
-        energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
-        # need to divide by 2 to avoid double counting
-        return 0.5 * self.k_units * np.sum(energy_int) - energy_ext_neg
+    #     p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
+    #     energy_ext_neg = np.sum(self.E * self.p)
+    #     energy_int = np.sum(p_dot_p / r_sq ** 1.5)
+    #     energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
+    #     # need to divide by 2 to avoid double counting
+    #     return 0.5 * self.k_units * np.sum(energy_int) - energy_ext_neg
 
     def step(self):
         """
@@ -135,49 +131,79 @@ class DipoleSim:
         """
         # px and py 2 x N with top row being top layer and bottom row being bottom layer
         # rx and ry N
-        trial_dipole = self.rng.integers(self.N)  # int
-        trial_layer = self.rng.integers(2)  # int
-        trial_p = self.orientations[self.rng.integers(self.orientations_num)]  # array: 2
-        if trial_layer and self.odd:
+        trial_dipole = self.rng.integers(self.N)        # int
+        trial_layer = self.rng.integers(2)              # int
+
+        # select trial dipole and flip its orientations if it's in an odd layer
+        trial_p = self.orientations[self.rng.integers(self.orientations_num)]
+        if self.odd and trial_layer == 1:
             trial_p = -trial_p
+
         dp = trial_p - self.p[trial_layer, trial_dipole, :]
         if dp[0] and dp[1]:
             dr = nbf.calc_distances(self.r, trial_dipole)
-            r_sq = nbf.calc_rsq_2layer(dr, self.c_sq, trial_layer, self.N)
+            r_sq = nbf.calc_square_magnitude(dr)
+
+            r_sq = nbf.add_to_row(np.tile(nbf.calc_square_magnitude(dr), (2, 1)), 1)
             r_sq[r_sq == 0] = np.inf  # remove self energy
-            energy_decrease = nbf.calc_energy_decrease(dp, self.p, dr, r_sq, self.E, self.k_units)
+            energy_decrease = nbf.calc_energy_decrease2(dp, self.p, dr, r_sq, self.E)
             if nbf.accept_energy_change(self.beta, energy_decrease):
                 self.accepted += 1
                 self.p[trial_layer, trial_dipole, :] = trial_p
+                # print("accepted")
+                # print(trial_p)
+                self.energy -= energy_decrease
+
+    # def step2(self):
+    #     """
+    #     One step of the Monte Carlo
+    #     :return:
+    #     """
+    #     # px and py 2 x N with top row being top layer and bottom row being bottom layer
+    #     # rx and ry N
+    #     trial_dipole = self.rng.integers(self.N)  # int
+    #     trial_layer = self.rng.integers(2)  # int
+    #     trial_p = self.orientations[self.rng.integers(self.orientations_num)]  # array: 2
+    #     if trial_layer and self.odd:
+    #         trial_p = -trial_p
+    #     dp = trial_p - self.p[trial_layer, trial_dipole, :]
+    #     if dp[0] and dp[1]:
+    #         dr = nbf.calc_distances(self.r, trial_dipole)
+    #         r_sq = nbf.calc_rsq_2layer(dr, self.c_sq, trial_layer, self.N)
+    #         r_sq[r_sq == 0] = np.inf  # remove self energy
+    #         energy_decrease = nbf.calc_energy_decrease(dp, self.p, dr, r_sq, self.E, self.k_units)
+    #         if nbf.accept_energy_change(self.beta, energy_decrease):
+    #             self.accepted += 1
+    #             self.p[trial_layer, trial_dipole, :] = trial_p
 
     def run_over_system(self):
         for _ in range(self.N_total):
             self.step()
 
     def calc_polarization(self):
-        return nbf.calc_polarization_total(self.p, self.volume)
+        return nbf.calc_polarization_total2(self.p, self.volume_per_dipole)
 
     def calc_polarization_per_layer(self):
-        return nbf.calc_polarization_per_layer(self.p, self.volume)
+        return nbf.calc_polarization_per_layer2(self.p, self.volume_per_dipole)
 
     def calc_polarization_x(self):
-        return nbf.calc_polarization_x(self.p, self.volume)
+        return nbf.calc_polarization_x2(self.p, self.volume_per_dipole)
 
     def calc_polarization_per_layer_x(self):
-        return nbf.calc_polarization_per_layer_x(self.p, self.volume)
+        return nbf.calc_polarization_per_layer_x2(self.p, self.volume_per_dipole)
 
     def calc_polarization_y(self):
-        return nbf.calc_polarization_y(self.p, self.volume)
+        return nbf.calc_polarization_y2(self.p, self.volume_per_dipole)
 
     def calc_polarization_per_layer_y(self):
-        return nbf.calc_polarization_per_layer_x(self.p, self.volume)
+        return nbf.calc_polarization_per_layer_x2(self.p, self.volume_per_dipole)
 
     def change_temperature(self, temperature: float):
         """
         Change the current temperature of the system
         :param temperature:
         """
-        self.beta = 1. / (DipoleSim.boltzmann * temperature)
+        self.beta = 1. / temperature
 
     def change_electric_field(self, efield_x: float, efield_y: float):
         """
@@ -192,7 +218,7 @@ class DipoleSim:
         Get the current temperature
         :return: current system temperature in K
         """
-        return 1. / (DipoleSim.boltzmann * self.beta)
+        return 1. / self.beta
 
     def reset(self):
         self.p = self.gen_dipole_orientations()
@@ -294,7 +320,7 @@ class DipoleSim:
         if name is None:
             name = self.img_num
         plt.figure()
-        arrow_vecs = self.p * 3
+        arrow_vecs = self.p * self.a_c_conv * 0.5
         arrow_starts = self.r - arrow_vecs * 0.5
         # p_net = np.sum(arrow_vecs, axis=0)
         colors = ["b", "r"]
@@ -315,7 +341,7 @@ class DipoleSim:
 
 def load(filename):
     data = np.loadtxt(filename)
-    p = np.zeros(2, len(data), 2)
+    p = np.zeros((2, len(data), 2))
     p[0, :, :] = data[:, :2]
     p[1, :, :] = data[:, 2:]
     return p
