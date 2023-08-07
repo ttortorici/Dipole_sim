@@ -7,7 +7,7 @@ import numba as nb
 
 class DipoleSim:
 
-    def __init__(self, rows: int, columns: int, temp0, orientations_num: int = 3, lattice: str = "t", p0=None):
+    def __init__(self, rows: int, columns: int, temp0: float, orientations_num: int = 3, lattice: str = "t", p0=None):
         """
         Monte Carlo
         :param rows: number of rows of dipoles
@@ -31,35 +31,67 @@ class DipoleSim:
                 self.r = self.gen_dipoles_triangular2(columns, rows)
             else:
                 self.r = self.gen_dipoles_triangular(columns, rows)
-        else:
+        elif "s" in lattice.lower():
             self.r = self.gen_dipoles_square(columns, rows)
+        else:
+            self.r = self.gen_dipoles_1d(columns, rows)
 
         # self.rows = rows
         self.columns = columns
         self.N = columns * rows
+
+        self.p = None
         if p0 is None:
-            self.p = self.gen_dipole_orientations(self.N)
+            self.randomize_dipoles()
         else:
             self.p = p0
         self.img_num = 0
         self.accepted = 0
 
     def calc_energy(self):
+        energy = 0.
+        for ii in range(self.N):
+            dr = self.r[ii] - self.r
+            r_sq = np.sum(dr * dr, axis=1)
+            r_sq[r_sq == 0] = np.inf
+            pi_dot_p = np.sum(self.p[ii] * self.p, axis=1)
+            pi_dot_r = np.sum(self.p[ii] * dr, axis=1)
+            p_dot_r = np.sum(self.p * dr, axis=1)
+            energy += np.sum(pi_dot_p / r_sq ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r / r_sq ** 2.5)
+        return energy * 0.5
+
+    def calc_energy2(self):
         px = np.array([self.p[:, 0]])
         py = np.array([self.p[:, 1]])
         rx = np.array([self.r[:, 0]])
         ry = np.array([self.r[:, 1]])
 
-        p_dot_p = px.transpose() * px + py.transpose() * py  # NxN
-        dx = np.subtract(rx.transpose(), rx)  # NxN
-        dy = np.subtract(ry.transpose(), ry)  # NxN
+        p_dot_p = px.T * px + py.T * py  # NxN
+        dx = rx.T - rx  # NxN
+        dy = ry.T - ry  # NxN
         r_sq = dx * dx + dy * dy  # NxN
         r_sq[r_sq == 0] = np.inf
-        p_dot_r_sq = (px.transpose() * dx + py.transpose() * dy) * (px * dx + py * dy)
+        p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
         energy_ext_neg = np.sum(self.E * self.p)
-        energy_int = np.sum(p_dot_p / r_sq ** 1.5)
-        energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
-        return (0.5 * np.sum(energy_int) - energy_ext_neg) / self.N
+        energy_int = np.sum(p_dot_p / r_sq ** 1.5) - 3 * np.sum(p_dot_r_sq / r_sq ** 2.5)
+        return 0.5 * np.sum(energy_int) - energy_ext_neg
+
+    def calc_energy_nearest_neighbor(self):
+        energy_int = 0.
+        for ii in range(self.N):
+            pi = self.p[ii]
+            dr = self.r[ii] - self.r  # Nx2
+            r_sq = np.sum(dr * dr, axis=1)  # N
+            r_sq[r_sq == 0] = np.inf
+            neighbor_locations = np.where(r_sq < 1.001)
+            neighbors = self.p[neighbor_locations]
+            dr_neighbors = dr[neighbor_locations]
+
+            pi_dot_p = np.sum(pi * neighbors, axis=1)  # (2) dot (Nx2) -> N
+            pi_dot_dr = np.sum(pi * dr_neighbors, axis=1)  # (2) dot (Nx2) -> N
+            p_dot_dr = np.sum(neighbors * dr_neighbors, axis=1)  # (Nx2) dot (Nx2) -> N
+            energy_int -= np.sum(3 * pi_dot_dr * p_dot_dr - pi_dot_p)
+        return 0.5 * np.sum(energy_int) - np.sum(self.p * self.E)
 
     def step(self):
         """
@@ -79,17 +111,35 @@ class DipoleSim:
             p_dot_r = np.sum(self.p * dr, axis=1)  # (Nx2) dot (Nx2) -> N
             dU_neg = sum(dp * self.E) + np.sum((3 * dp_dot_dr * p_dot_r - dp_dot_p * r_sq_n) / r_sq_d ** 2.5)
 
-            test = np.log(random.random())
-            against = self.beta * dU_neg
-
-            print(test)
-            print(against)
-
-            if test < against:
+            if np.log(random.random()) < self.beta * dU_neg:
 
                 self.accepted += 1
                 self.p[trial_dipole] = trial_p
                 # print(dU_neg)
+
+    def step_nearest_neighbor(self):
+        """
+        One step of the Monte Carlo
+        :return:
+        """
+        trial_dipole = self.rng.integers(self.N)
+        trial_p = self.orientations[self.rng.integers(self.orientations_num)]
+        if not (self.p[trial_dipole][0] == trial_p[0]):
+            dp = trial_p - self.p[trial_dipole]  # 2
+            dr = self.r[trial_dipole] - self.r  # Nx2
+            r_sq = np.sum(dr * dr, axis=1)  # N
+            r_sq[r_sq == 0] = np.inf
+            neighbor_locations = np.where(r_sq < 1.001)
+            neighbors = self.p[neighbor_locations]
+            dr_neighbors = dr[neighbor_locations]
+
+            dp_dot_p = np.sum(dp * neighbors, axis=1)  # (2) dot (Nx2) -> N
+            dp_dot_dr = np.sum(dp * dr_neighbors, axis=1)  # (2) dot (Nx2) -> N
+            p_dot_r = np.sum(neighbors * dr_neighbors, axis=1)  # (Nx2) dot (Nx2) -> N
+            dU_neg = sum(dp * self.E) + np.sum(3 * dp_dot_dr * p_dot_r - dp_dot_p)
+            if np.log(random.random()) < self.beta * dU_neg:
+                self.accepted += 1
+                self.p[trial_dipole] = trial_p
 
     def calc_polarization(self) -> np.ndarray:
         """
@@ -139,14 +189,13 @@ class DipoleSim:
     def gen_dipoles_triangular(rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in triangular lattice in a rhombus
-        :param a: spacing between dipoles in nm
         :param rows: number of rows
         :param columns: number of columns
         :return: position of dipoles
         """
         x = 0.5
         y = np.sqrt(3) * 0.5
-        r = np.zeros((rows * columns, 2))
+        r = np.empty((rows * columns, 2), dtype=float)
         for jj in range(rows):
             start = jj * rows
             r[start:start + columns, 0] = np.arange(columns) + x * jj
@@ -157,34 +206,44 @@ class DipoleSim:
     def gen_dipoles_triangular2(rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in a triangular lattice in a square
-        :param a: spacing between dipoles in nm
         :param rows: number of rows
         :param columns: number of columns
         :return: position of dipoles
         """
         x = 0.5
         y = np.sqrt(3) * 0.5
-        r = np.zeros((rows * columns, 2))
+        r = np.empty((rows * columns, 2), dtype=float)
         for jj in range(rows):
             start = jj * rows
-            r[start:start + columns, 0] = np.arange(columns) + x * (jj % 2)
-            r[start:start + columns, 1] = np.ones(columns) * y * jj
+            r[start:start + columns, 0] = np.arange(columns, dtype=float) + x * (jj % 2)
+            r[start:start + columns, 1] = np.ones(columns, dtype=float) * y * jj
         return r
 
     @staticmethod
     def gen_dipoles_square(rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in a square lattice
-        :param a: spacing between dipoles in nm
         :param rows: number of rows
         :param columns: number of columns
         :return: position of dipoles
         """
-        r = np.zeros((rows * columns, 2))
+        r = np.empty((rows * columns, 2), dtype=float)
         for jj in range(rows):
             start = jj * rows
-            r[start:start + columns, 0] = np.arange(columns)
-            r[start:start + columns, 1] = np.ones(columns) * jj
+            r[start:start + columns, 0] = np.arange(columns, dtype=float)
+            r[start:start + columns, 1] = np.ones(columns, dtype=float) * jj
+        return r
+
+    @staticmethod
+    def gen_dipoles_1d(rows: int, columns: int) -> np.ndarray:
+        """
+        Generate the vectors of position for each dipole in a square lattice
+        :param rows: number of rows
+        :param columns: number of columns
+        :return: position of dipoles
+        """
+        r = np.zeros((rows * columns, 2), dtype=float)
+        r[:, 0] = np.arange(rows * columns, dtype=float)
         return r
 
     def gen_dipole_orientations(self, dipole_num: int) -> tuple[np.ndarray, np.ndarray]:
@@ -198,6 +257,16 @@ class DipoleSim:
         # print(ran_choices)
         return self.orientations[ran_choices]
 
+    def randomize_dipoles(self):
+        """Randomize the orientations of the dipoles"""
+        self.accepted = 0
+        self.p = self.gen_dipole_orientations(self.N)
+
+    def align_dipoles(self):
+        """Make all the dipoles point to the right"""
+        self.accepted = 0
+        self.p = self.orientations[[0] * self.N]
+
     @staticmethod
     def create_ori_vec(orientations_num):
         """
@@ -205,14 +274,10 @@ class DipoleSim:
         :param orientations_num: number of possible directions
         :return: array of 2-long basis vectors
         """
-        if orientations_num == 3:
-            sqrt3half = np.sqrt(3) * 0.5
-            orientations = np.array([[0, 1], [sqrt3half, -0.5], [-sqrt3half, -0.5]])
-        else:
-            del_theta = 2 * np.pi / orientations_num
-            orientations = np.zeros((orientations_num, 2))
-            for e in range(orientations_num):
-                orientations[e] = np.array([np.cos(del_theta * e), np.sin(del_theta * e)])
+        del_theta = 2 * np.pi / orientations_num
+        orientations = np.zeros((orientations_num, 2))
+        for e in range(orientations_num):
+            orientations[e] = np.array([np.cos(del_theta * e), np.sin(del_theta * e)])
         return orientations
 
     def save_img(self, name=None):
@@ -246,6 +311,10 @@ class DipoleSim:
     def run(self, full_steps):
         for ii in range(self.N * full_steps):
             self.step()
+
+    def run_nearest_neighbor(self, full_steps):
+        for ii in range(self.N * full_steps):
+            self.step_nearest_neighbor()
 
     def test_polarization(self, field_strength, pts=10):
         self.save_img("seed")
