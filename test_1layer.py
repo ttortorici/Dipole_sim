@@ -42,11 +42,17 @@ def test_1D_ising(N):
     u_vec = np.empty(2 ** N)
     for ii, indices in enumerate(itertools.product(*[range(2)] * N)):
         s = np.array([[directions[index] for index in indices]])
+        print(s)
         s_coupling_matrix = s.T * s
+        print(s_coupling_matrix)
         dr_matrix = r.T - r
         r_3rd_matrix = abs(dr_matrix) ** 3
         r_3rd_matrix[r_3rd_matrix == 0] = np.inf
-        u_vec[ii] = np.sum(s_coupling_matrix / r_3rd_matrix)     # coupling constant is 2, so don't need to divide by 2
+        print(r_3rd_matrix)
+        u_vec[ii] = -np.sum(s_coupling_matrix / r_3rd_matrix)     # coupling constant is 2, so don't need to divide by 2
+        print(u_vec[ii])
+    print("*********")
+    print(u_vec)
 
     energy_mc_lr = np.empty(len(temperatures))
     energy_mc_nn = np.empty(len(temperatures))
@@ -247,9 +253,12 @@ def test_clock(rows, cols):
     y_ij = r_y.T - r_y
     r_sq = x_ij * x_ij + y_ij * y_ij
     r_sq[r_sq == 0] = np.inf
+    print(x_ij)
+    print(y_ij)
+    print(r_sq)
     # neighbor_indices = np.where(r_sq_matrix < 1.0001)
 
-    u_vec_lr = np.empty(3 ** N)
+    u_vec = np.empty(3 ** N)
     # u_vec_nn = np.empty(3 ** N)
     orientations_x = [1, -0.5, -0.5]
     orientations_y = [0, 0.5 * np.sqrt(3), -0.5 * np.sqrt(3)]
@@ -257,58 +266,74 @@ def test_clock(rows, cols):
         p_x = np.array([[orientations_x[index] for index in indices]], dtype=float).reshape((1, N))
         p_y = np.array([[orientations_y[index] for index in indices]], dtype=float).reshape((1, N))
 
-        pi_dot_pj = p_x.T * p_x + p_y.T * p_y
-        pi_dot_rij_pj_dot_rij = (p_x.T * x_ij + p_y.T * y_ij) * (p_x * x_ij + p_y * x_ij)
+        # print(p_x)
+        # print(p_y)
+        # print(p_x.T * x_ij + p_y.T * y_ij)
+        # print(p_x * x_ij + p_y * y_ij)
 
-        u_vec_lr[ii] = 0.5 * (np.sum(pi_dot_pj / r_sq ** 1.5) - 3. * np.sum(pi_dot_rij_pj_dot_rij / r_sq ** 2.5))
+        pi_dot_pj = p_x.T * p_x + p_y.T * p_y
+        pi_dot_rij_pj_dot_rij = (p_x.T * x_ij + p_y.T * y_ij) * (p_x * x_ij + p_y * y_ij)
+        # print(pi_dot_pj)
+        # print(pi_dot_rij_pj_dot_rij)
+
+        u_vec[ii] = 0.5 * (np.sum(pi_dot_pj / r_sq ** 1.5) - 3. * np.sum(pi_dot_rij_pj_dot_rij / r_sq ** 2.5))
+        # print(u_vec[ii])
         # u_vec_nn[ii] = 0.5 * np.sum(coupling_matrix[neighbor_indices] * (
         #         1. - 3. * coupling_matrix[neighbor_indices] * dx_matrix_sq[neighbor_indices]
         # ))
-
+        # if ii == 71 or ii == 77:
+        #     print("\n**************")
+        #     print(indices)
+        #     print("**************\n")
+    # print(np.min(u_vec))
+    # print(np.where(u_vec==np.min(u_vec)))
+    # print("****************")
     energy_mc_lr = np.empty(len(temperatures))
     energy_mc_nn = np.empty(len(temperatures))
     energy_mc_lr_std = np.empty(len(temperatures))
     energy_mc_nn_std = np.empty(len(temperatures))
-    energy_an_lr = np.empty(len(temperatures))
+    energy_an = np.empty(len(temperatures))
     # energy_an_nn = np.empty(len(temperatures))
+    sim_lr = DipoleSim(rows=rows, columns=cols, temp0=temperatures[0],
+                       orientations_num=3, lattice="t")
+    # sim_nn = DipoleSim(rows=rows, columns=cols, temp0=temperatures[0],
+    #                    orientations_num=3, lattice="t")
     for ii, t in enumerate(temperatures):
-        boltz_terms_lr = np.exp(-u_vec_lr / t)
-        z_lr = np.sum(boltz_terms_lr)
-        energy_an_lr[ii] = np.sum(boltz_terms_lr * u_vec_lr) / z_lr
+        boltz_terms = np.exp(-u_vec / t)
+        z = np.sum(boltz_terms)
+        energy_an[ii] = np.sum(boltz_terms * u_vec) / z
         # boltz_terms_nn = np.exp(-u_vec_nn / t)
         # z_nn = np.sum(boltz_terms_nn)
         # energy_an_nn[ii] = np.sum(boltz_terms_nn * u_vec_nn) / z_nn
         # simulation.change_temperature(t)
-        sim_lr = DipoleSim(rows=rows, columns=cols, temp0=t,
-                           orientations_num=3, lattice="t")
-        sim_nn = DipoleSim(rows=rows, columns=cols, temp0=t,
-                           orientations_num=3, lattice="t")
 
+        sim_lr.change_temperature(t)
+        # sim_nn.change_temperature(t)
         energy_to_ave_lr = np.empty(to_ave)
-        energy_to_ave_nn = np.empty(to_ave)
+        # energy_to_ave_nn = np.empty(to_ave)
         for aa in range(to_ave):
             sim_lr.run(50)
-            sim_nn.run_nearest_neighbor(50)
+            # sim_nn.run_nearest_neighbor(50)
             energy_to_ave_lr[aa] = sim_lr.calc_energy()
-            energy_to_ave_nn[aa] = sim_nn.calc_energy_nearest_neighbor()
+            # energy_to_ave_nn[aa] = sim_nn.calc_energy_nearest_neighbor()
         energy_mc_lr[ii] = np.average(energy_to_ave_lr)
         energy_mc_lr_std[ii] = np.std(energy_to_ave_lr)
-        energy_mc_nn[ii] = np.average(energy_to_ave_nn)
-        energy_mc_nn_std[ii] = np.std(energy_to_ave_nn)
+        # energy_mc_nn[ii] = np.average(energy_to_ave_nn)
+        # energy_mc_nn_std[ii] = np.std(energy_to_ave_nn)
         print(sim_lr.accepted)
-        print(sim_nn.accepted)
+        # print(sim_nn.accepted)
         # simulation.save_img()
         print(ii)
 
     plt.figure()
-    plt.plot(temperatures, energy_an_lr,
+    plt.plot(temperatures, energy_an,
              label="analytical (long range)")
     # plt.plot(temperatures, energy_an_nn,
     #          label="analytical (nearest neighbor)")
     plt.errorbar(temperatures, energy_mc_lr, energy_mc_lr_std,
                  marker="x", linestyle=(0, (1, 10000)), label=f"MC lr {to_ave} iter")
-    plt.errorbar(temperatures, energy_mc_nn, energy_mc_nn_std,
-                 marker="x", linestyle=(0, (1, 10000)), label=f"MC nn {to_ave} iter")
+    # plt.errorbar(temperatures, energy_mc_nn, energy_mc_nn_std,
+    #              marker="x", linestyle=(0, (1, 10000)), label=f"MC nn {to_ave} iter")
     plt.legend()
     plt.title(f"2D Clock3 N={N}")
     plt.xlabel("kT")
@@ -430,9 +455,9 @@ if __name__ == "__main__":
     #                 orientations_num=3, lattice="t")
     # temperature = np.linspace(1e-6, 2, 5)[::-1]
     # test_slow_fast(temperature)
-    # test_1D_ising(9)
+    # test_1D_ising(3)
     # test_ising(3, 3)
-    # test_clock(3, 3)
+    test_clock(2, 2)
     # test_clock_compare_starts(10, 10, to_ave=50)
-    test_ising_compare_starts(100, to_ave=50)
+    # test_ising_compare_starts(100, to_ave=50)
     plt.show()

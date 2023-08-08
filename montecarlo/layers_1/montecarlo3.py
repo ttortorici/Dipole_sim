@@ -186,6 +186,13 @@ class DipoleSim:
         return 1. / self.beta
 
     @staticmethod
+    def average(property):
+        ave = np.average(property)
+        std = np.std(property)
+        correlation = (np.average(property * property[0]) - np.average(property) * property[0]) / std ** 2
+        correlation_time = 
+
+    @staticmethod
     def gen_dipoles_triangular(rows: int, columns: int) -> np.ndarray:
         """
         Generate the vectors of position for each dipole in triangular lattice in a rhombus
