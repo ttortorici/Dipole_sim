@@ -1,4 +1,4 @@
-from montecarlo.layers_1.montecarlo3 import DipoleSim
+from montecarlo.layers_1.montecarlo import DipoleSim
 # from exact7 import calculate_energy_vec
 # from exact_calc_9_dipole import calc_averages
 import matplotlib.pylab as plt
