@@ -2,13 +2,20 @@ import numpy as np
 import matplotlib.pylab as plt
 import random
 import os
+from numba import njit, float64
 
 
-import numpy as np
-import matplotlib.pylab as plt
-import random
-import os
-import numba as nb
+# @njit(float64(float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:]),
+#       fastmath=True)
+def calc_energy_fast(px, py, dx, dy, r_sq, field):
+    # generate all dipoles dotted with other dipoles
+    p_dot_p = px.T * px + py.T * py  # 2N x 2N
+
+    p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
+    energy_ext_neg = np.sum(field[0] * px) + np.sum(field[1] * py)
+    energy_int = np.sum(p_dot_p / r_sq ** 1.5) - 3 * np.sum(p_dot_r_sq / r_sq ** 2.5)
+    # need to divide by 2 to avoid double counting
+    return 0.5 * np.sum(p_dot_p / r_sq ** 1.5 - 3 * p_dot_r_sq / r_sq ** 2.5) - np.sum(energy_ext_neg)
 
 
 class DipoleSim:
@@ -44,6 +51,7 @@ class DipoleSim:
         else:
             self.r = self.gen_dipoles_1d(columns, rows)
         self.r *= self.a
+        # print(self.r)
 
         # self.rows = rows
         self.columns = columns
@@ -53,57 +61,11 @@ class DipoleSim:
         self.p = None
         if p0 is None:
             self.randomize_dipoles()
+            self.p = self.gen_dipoles_aligned()
         else:
             self.p = p0
         self.img_num = 0
         self.accepted = 0
-        print(self.p)
-        print(self.calc_energy())
-        print(self.calc_energy2())
-
-    def calc_energy(self):
-        energy = 0.
-        # first self layer
-        for ii in range(self.N_layer):
-            dr = self.r[ii] - self.r
-            r_sq = np.sum(dr * dr, axis=1)
-            r_sq2 = r_sq + 1
-            r_sq[r_sq == 0] = np.inf
-            pi_dot_p = np.sum(self.p[ii] * self.p[:self.N_layer], axis=1)
-            pi_dot_p2 = np.sum(self.p[ii] * self.p[self.N_layer:], axis=1)
-            pi_dot_r = np.sum(self.p[ii] * dr, axis=1)
-            p_dot_r = np.sum(self.p[:self.N_layer] * dr, axis=1)
-            p_dot_r2 = np.sum(self.p[self.N_layer:] * dr, axis=1)
-            energy += np.sum(pi_dot_p / r_sq ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r / r_sq ** 2.5)      # same layer
-            energy += np.sum(pi_dot_p2 / r_sq2 ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r2 / r_sq2 ** 2.5)  # cross layer
-        # second self layer
-        for ii in range(self.N_layer, self.N):
-            dr = self.r[ii - self.N_layer] - self.r
-            r_sq = np.sum(dr * dr, axis=1)
-            r_sq[r_sq == 0] = np.inf
-            pi_dot_p = np.sum(self.p[ii] * self.p[self.N_layer:], axis=1)
-            pi_dot_p2 = np.sum(self.p[ii] * self.p[:self.N_layer], axis=1)
-            pi_dot_r = np.sum(self.p[ii] * dr, axis=1)
-            p_dot_r = np.sum(self.p[:self.N_layer] * dr, axis=1)
-            p_dot_r2 = np.sum(self.p[self.N_layer:] * dr, axis=1)
-            energy += np.sum(pi_dot_p / r_sq ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r / r_sq ** 2.5)      # same layer
-            energy += np.sum(pi_dot_p2 / r_sq2 ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r2 / r_sq2 ** 2.5)  # cross layer
-        return energy * 0.5
-
-    def calc_energy2(self):
-        """
-
-        :return:
-        """
-        # arrange all the x- and y-values in 1 x 2N arrays
-        # px = np.array([np.ravel(self.p[:, :, 0])])  # 1 x 2N
-        # py = np.array([np.ravel(self.p[:, :, 1])])
-
-        px = np.array([self.p[:, 0]])
-        py = np.array([self.p[:, 1]])
-        print(px.shape)
-        # rx = np.array([self.r[:, 0]])
-        # ry = np.array([self.r[:, 1]])
 
         # duplicate xy values of r into 1 x 2N arrays
         rx = np.zeros((1, self.N))
@@ -113,23 +75,56 @@ class DipoleSim:
         ry[0, :self.N_layer] = self.r[:, 1]
         ry[0, self.N_layer:] = self.r[:, 1]
 
-        # generate all dipoles dotted with other dipoles
-        p_dot_p = px.T * px + py.T * py  # 2N x 2N
-
         # generate all distances between dipoles
-        dx = rx.T - rx
-        dy = ry.T - ry
-        r_sq = dx * dx + dy * dy  # NxN
-        r_sq[self.N:, :self.N] += 1  # add interlayer distances
-        r_sq[:self.N, self.N:] += 1  # add interlayer distances
-        r_sq[r_sq == 0] = np.inf  # this removes self energy
+        self.dx = rx.T - rx
+        self.dy = ry.T - ry
+        self.r_sq = self.dx * self.dx + self.dy * self.dy  # NxN
+        self.r_sq[self.N_layer:, :self.N_layer] += 1  # add interlayer distances
+        self.r_sq[:self.N_layer, self.N_layer:] += 1  # add interlayer distances
+        self.r_sq[self.r_sq == 0] = np.inf  # this removes self energy
 
-        p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
-        energy_ext_neg = np.sum(self.E * self.p)
-        energy_int = np.sum(p_dot_p / r_sq ** 1.5)
-        energy_int -= np.sum(3 * p_dot_r_sq / r_sq ** 2.5)
-        # need to divide by 2 to avoid double counting
-        return 0.5 * np.sum(energy_int) - energy_ext_neg
+        # print(self.p)
+        # print(self.calc_energy())
+
+    # def calc_energy(self):
+    #     energy = 0.
+    #     # first self layer
+    #     for ii in range(self.N_layer):
+    #         dr = self.r[ii] - self.r
+    #         r_sq = np.sum(dr * dr, axis=1)
+    #         r_sq2 = r_sq + 1
+    #         r_sq[r_sq == 0] = np.inf
+    #         pi_dot_p = np.sum(self.p[ii] * self.p[:self.N_layer], axis=1)
+    #         pi_dot_p2 = np.sum(self.p[ii] * self.p[self.N_layer:], axis=1)
+    #         pi_dot_r = np.sum(self.p[ii] * dr, axis=1)
+    #         p_dot_r = np.sum(self.p[:self.N_layer] * dr, axis=1)
+    #         p_dot_r2 = np.sum(self.p[self.N_layer:] * dr, axis=1)
+    #         energy += np.sum(pi_dot_p / r_sq ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r / r_sq ** 2.5)      # same layer
+    #         energy += np.sum(pi_dot_p2 / r_sq2 ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r2 / r_sq2 ** 2.5)  # cross layer
+    #     # second self layer
+    #     for ii in range(self.N_layer, self.N):
+    #         dr = self.r[ii - self.N_layer] - self.r
+    #         r_sq = np.sum(dr * dr, axis=1)
+    #         r_sq[r_sq == 0] = np.inf
+    #         pi_dot_p = np.sum(self.p[ii] * self.p[self.N_layer:], axis=1)
+    #         pi_dot_p2 = np.sum(self.p[ii] * self.p[:self.N_layer], axis=1)
+    #         pi_dot_r = np.sum(self.p[ii] * dr, axis=1)
+    #         p_dot_r = np.sum(self.p[:self.N_layer] * dr, axis=1)
+    #         p_dot_r2 = np.sum(self.p[self.N_layer:] * dr, axis=1)
+    #         energy += np.sum(pi_dot_p / r_sq ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r / r_sq ** 2.5)      # same layer
+    #         energy += np.sum(pi_dot_p2 / r_sq2 ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r2 / r_sq2 ** 2.5)  # cross layer
+    #     return energy * 0.5
+
+    def calc_energy(self):
+        """
+
+        :return:
+        """
+        px = np.array([self.p[:, 0]])
+        py = np.array([self.p[:, 1]])
+        # print(px.shape)
+        return calc_energy_fast(px, py, self.dx, self.dy, self.r_sq, self.E)
+
 
     def calc_energy_nearest_neighbor(self):
         energy_int = 0.
@@ -308,21 +303,24 @@ class DipoleSim:
         r[:, 0] = np.arange(rows * columns, dtype=float)
         return r
 
-    def gen_dipole_orientations(self, dipole_num: int) -> tuple[np.ndarray, np.ndarray]:
+    def gen_dipole_orientations(self) -> tuple[np.ndarray, np.ndarray]:
         """
         Initialize dipole directions
         :param dipole_num: number of dipoles
         :return: array of 2-vectors representing dipole strength in x and y directions
         """
         # print(self.orientations_num)
-        ran_choices = self.rng.integers(0, self.orientations_num, size=dipole_num)
+        ran_choices = self.rng.integers(0, self.orientations_num, size=self.N)
         # print(ran_choices)
         return self.orientations[ran_choices]
+
+    def gen_dipoles_aligned(self):
+        return self.orientations[np.zeros(self.N, dtype=int)]
 
     def randomize_dipoles(self):
         """Randomize the orientations of the dipoles"""
         self.accepted = 0
-        self.p = self.gen_dipole_orientations(self.N)
+        self.p = self.gen_dipole_orientations()
 
     def align_dipoles(self):
         """Make all the dipoles point to the right"""
@@ -408,7 +406,7 @@ class DipoleSim:
 
 
 if __name__ == "__main__":
-    sim = DipoleSim(1.1, 1, 1, 45, 3, "t")
+    sim = DipoleSim(1, 1, 1, 5, 3, "t")
     # p = np.loadtxt('dipoles_300K_ferro_5000000.txt')
     # sim = DipoleSim(1.1, 30, 30, 300, 0.08789, 0, 1.5, p)
     # sim.change_electric_field(np.array([0, 10]))
