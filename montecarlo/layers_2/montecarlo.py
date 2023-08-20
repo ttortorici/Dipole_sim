@@ -2,20 +2,6 @@ import numpy as np
 import matplotlib.pylab as plt
 import random
 import os
-from numba import njit, float64
-
-
-# @njit(float64(float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:]),
-#       fastmath=True)
-def calc_energy_fast(px, py, dx, dy, r_sq, field):
-    # generate all dipoles dotted with other dipoles
-    p_dot_p = px.T * px + py.T * py  # 2N x 2N
-
-    p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
-    energy_ext_neg = np.sum(field[0] * px) + np.sum(field[1] * py)
-    energy_int = np.sum(p_dot_p / r_sq ** 1.5) - 3 * np.sum(p_dot_r_sq / r_sq ** 2.5)
-    # need to divide by 2 to avoid double counting
-    return 0.5 * np.sum(p_dot_p / r_sq ** 1.5 - 3 * p_dot_r_sq / r_sq ** 2.5) - np.sum(energy_ext_neg)
 
 
 class DipoleSim:
@@ -35,6 +21,12 @@ class DipoleSim:
         self.beta = 1. / temp0
         self.E = np.zeros(2)
 
+        # self.rows = rows
+        self.columns = columns
+        self.N_layer = columns * rows
+        self.N = self.N_layer * 2
+        self.volume = self.N_layer * a_over_c * a_over_c
+
         self.a = a_over_c  # a in units of c
 
         self.orientations_num = orientations_num    # number of possible directions
@@ -42,6 +34,7 @@ class DipoleSim:
 
         # set the lattice
         if "t" in lattice.lower():
+            self.volume *= 0.5 * np.sqrt(3)
             if "2" in lattice:
                 self.r = self.gen_dipoles_triangular2(columns, rows)
             else:
@@ -51,12 +44,8 @@ class DipoleSim:
         else:
             self.r = self.gen_dipoles_1d(columns, rows)
         self.r *= self.a
+        self.r = np.hstack((self.r, self.r))
         # print(self.r)
-
-        # self.rows = rows
-        self.columns = columns
-        self.N_layer = columns * rows
-        self.N = self.N_layer * 2
 
         self.p = None
         if p0 is None:
@@ -68,12 +57,8 @@ class DipoleSim:
         self.accepted = 0
 
         # duplicate xy values of r into 1 x 2N arrays
-        rx = np.zeros((1, self.N))
-        ry = np.zeros((1, self.N))
-        rx[0, :self.N_layer] = self.r[:, 0]
-        rx[0, self.N_layer:] = self.r[:, 0]
-        ry[0, :self.N_layer] = self.r[:, 1]
-        ry[0, self.N_layer:] = self.r[:, 1]
+        rx = self.r[:, 0].reshape((1, self.N))
+        ry = self.r[:, 1].reshape((1, self.N))
 
         # generate all distances between dipoles
         self.dx = rx.T - rx
@@ -120,28 +105,18 @@ class DipoleSim:
 
         :return:
         """
-        px = np.array([self.p[:, 0]])
-        py = np.array([self.p[:, 1]])
+        px = self.p[:, 0].reshape((1, self.N))
+        py = self.p[:, 1].reshape((1, self.N))
         # print(px.shape)
-        return calc_energy_fast(px, py, self.dx, self.dy, self.r_sq, self.E)
 
+        # generate all dipoles dotted with other dipoles
+        p_dot_p = px.T * px + py.T * py  # 2N x 2N
 
-    def calc_energy_nearest_neighbor(self):
-        energy_int = 0.
-        for ii in range(self.N):
-            pi = self.p[ii]
-            dr = self.r[ii] - self.r  # Nx2
-            r_sq = np.sum(dr * dr, axis=1)  # N
-            r_sq[r_sq == 0] = np.inf
-            neighbor_locations = np.where(r_sq < 1.001)
-            neighbors = self.p[neighbor_locations]
-            dr_neighbors = dr[neighbor_locations]
-
-            pi_dot_p = np.sum(pi * neighbors, axis=1)  # (2) dot (Nx2) -> N
-            pi_dot_dr = np.sum(pi * dr_neighbors, axis=1)  # (2) dot (Nx2) -> N
-            p_dot_dr = np.sum(neighbors * dr_neighbors, axis=1)  # (Nx2) dot (Nx2) -> N
-            energy_int -= np.sum(3 * pi_dot_dr * p_dot_dr - pi_dot_p)
-        return 0.5 * np.sum(energy_int) - np.sum(self.p * self.E)
+        p_dot_r_sq = (px.T * self.dx + py.T * self.dy) * (px * self.dx + py * self.dy)
+        energy_ext_neg = np.sum(self.E[0] * px) + np.sum(self.E[1] * py)
+        energy_int = np.sum(p_dot_p / self.r_sq ** 1.5) - 3 * np.sum(p_dot_r_sq / self.r_sq ** 2.5)
+        # need to divide by 2 to avoid double counting
+        return 0.5 * np.sum(p_dot_p / self.r_sq ** 1.5 - 3 * p_dot_r_sq / self.r_sq ** 2.5) - np.sum(energy_ext_neg)
 
     def step(self):
         """
@@ -153,13 +128,16 @@ class DipoleSim:
         if not (self.p[trial_dipole][0] == trial_p[0]):
             dp = trial_p - self.p[trial_dipole]  # 2
             dr = self.r[trial_dipole] - self.r  # Nx2
-            r_sq_n = np.sum(dr * dr, axis=1)  # N
-            r_sq_d = np.copy(r_sq_n)
-            r_sq_d[r_sq_d == 0] = np.inf
+            r_sq = np.sum(dr * dr, axis=1)  # N
+            if trial_dipole < self.N_layer:     # if dipole is in first layer
+                r_sq[self.N_layer:] += 1
+            else:
+                r_sq[:self.N_layer] += 1
+            r_sq[r_sq == 0] = np.inf
             dp_dot_p = np.sum(dp * self.p, axis=1)  # (2) dot (Nx2) -> N
             dp_dot_dr = np.sum(dp * dr, axis=1)  # (2) dot (Nx2) -> N
             p_dot_r = np.sum(self.p * dr, axis=1)  # (Nx2) dot (Nx2) -> N
-            dU_neg = sum(dp * self.E) + np.sum((3 * dp_dot_dr * p_dot_r - dp_dot_p * r_sq_n) / r_sq_d ** 2.5)
+            dU_neg = sum(dp * self.E) + 3 * np.sum(dp_dot_dr * p_dot_r / r_sq ** 2.5) - np.sum(dp_dot_p / r_sq ** 1.5)
 
             if np.log(random.random()) < self.beta * dU_neg:
 
@@ -175,16 +153,20 @@ class DipoleSim:
         trial_dipole = self.rng.integers(self.N)
         trial_p = self.orientations[self.rng.integers(self.orientations_num)]
         if not (self.p[trial_dipole][0] == trial_p[0]):
-            dp = trial_p - self.p[trial_dipole]  # 2
-            dr = self.r[trial_dipole] - self.r  # Nx2
-            r_sq = np.sum(dr * dr, axis=1)  # N
+            dp = trial_p - self.p[trial_dipole]                 # 2
+            dr = self.r[trial_dipole % self.N_layer] - self.r   # Nx2
+            r_sq = np.sum(dr * dr, axis=1)                      # N
+            if trial_dipole < self.N_layer:     # if dipole is in first layer
+                r_sq[self.N_layer:] += 1
+            else:
+                r_sq[:self.N_layer] += 1
             r_sq[r_sq == 0] = np.inf
             neighbor_locations = np.where(r_sq < 1.001)
             neighbors = self.p[neighbor_locations]
             dr_neighbors = dr[neighbor_locations]
 
-            dp_dot_p = np.sum(dp * neighbors, axis=1)  # (2) dot (Nx2) -> N
-            dp_dot_dr = np.sum(dp * dr_neighbors, axis=1)  # (2) dot (Nx2) -> N
+            dp_dot_p = np.sum(dp * neighbors, axis=1)           # (2) dot (Nx2) -> N
+            dp_dot_dr = np.sum(dp * dr_neighbors, axis=1)       # (2) dot (Nx2) -> N
             p_dot_r = np.sum(neighbors * dr_neighbors, axis=1)  # (Nx2) dot (Nx2) -> N
             dU_neg = sum(dp * self.E) + np.sum(3 * dp_dot_dr * p_dot_r - dp_dot_p)
             if np.log(random.random()) < self.beta * dU_neg:
@@ -196,21 +178,21 @@ class DipoleSim:
         Calculate net dipole moment of the system
         :return: 2-vector of x and y components
         """
-        return np.sqrt(self.calc_polarization_x() ** 2 + self.calc_polarization_y() ** 2) / self.N
+        return np.sqrt(self.calc_polarization_x() ** 2 + self.calc_polarization_y() ** 2) / self.volume
 
     def calc_polarization_x(self) -> np.ndarray:
         """
         Calculate net dipole moment of the system
         :return: 2-vector of x and y components
         """
-        return np.sum(self.p[:, 0]) / self.N
+        return np.sum(self.p[:, 0]) / self.volume
 
     def calc_polarization_y(self) -> np.ndarray:
         """
         Calculate net dipole moment of the system
         :return: 2-vector of x and y components
         """
-        return np.sum(self.p[:, 1]) / self.N
+        return np.sum(self.p[:, 1]) / self.volume
 
     def change_temperature(self, temperature: float):
         """
