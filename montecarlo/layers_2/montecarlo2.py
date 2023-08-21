@@ -2,59 +2,69 @@ import numpy as np
 import matplotlib.pylab as plt
 import random
 import os
-from numba import njit, float64
+from montecarlo.layers_1.montecarlo import DipoleSim as OneLayerSim
 
 
-@njit(float64(float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:]),
-      fastmath=True)
-def calc_energy_fast(px, py, dx, dy, r_sq, field):
-    p_dot_p = px.T * px + py.T * py  # 2N x 2N
+class DipoleSim(OneLayerSim):
 
-    p_dot_r_sq = (px.T * dx + py.T * dy) * (px * dx + py * dy)
-    energy_ext_neg = np.sum(field[0] * px) + np.sum(field[1] * py)
-    energy_int = np.sum(p_dot_p / r_sq ** 1.5) - 3 * np.sum(p_dot_r_sq / r_sq ** 2.5)
-    # need to divide by 2 to avoid double counting
-    return 0.5 * energy_int - energy_ext_neg
-
-
-class DipoleSim:
-
-    def __init__(self, rows: int, columns: int, temp0: float, orientations_num: int = 3, lattice: str = "t", p0=None):
+    def __init__(self, a_over_c: float, rows: int, columns: int, temp0: float,
+                 orientations_num: int = 3, lattice: str = "t", oddness=False, p0=None):
         """
-        Monte Carlo for 1 layer
+        Monte Carlo for 2 layers
+        :param a_over_c: ratio of a to c lattice parameters.
         :param rows: number of rows of dipoles.
         :param columns: number of columns of dipoles.
         :param temp0: initial temperature (really kT) in units of p^2 / (4 pi eps0 eps a^3).
         :param orientations_num: number of possible orientations (if zero, sets to 3).
         :param lattice: type of lattice. t for triangular in a rhombus, t2 for triangular in a square, and s for square.
+        :param oddness: whether the second layer is rotated (True) or not (False)
         :param p0: None for a random "hot" initial condition, or give a specific vector of p values (Nx2) matrix
         """
         self.rng = np.random.default_rng()
+        if oddness:
+            self.oddness = -1
+        else:
+            self.oddness = 1
 
         # set units
         self.beta = 1. / temp0
         self.E = np.zeros(2)
 
+        # self.rows = rows
+        self.columns = columns
+        self.N_layer = columns * rows
+        self.N = self.N_layer * 2
+        self.volume = self.N_layer * a_over_c * a_over_c
+
+        self.a = a_over_c  # a in units of c
+
         self.orientations_num = orientations_num    # number of possible directions
         self.orientations = self.create_ori_vec(orientations_num)       # the vectors for each direction
 
-        self.r = self.set_lattice(lattice, rows, columns)
-
-
-        # self.rows = rows
-        self.columns = columns
-        self.N = columns * rows
-        self.volume = self.N
+        # set the lattice
+        if "t" in lattice.lower():
+            self.volume *= 0.5 * np.sqrt(3)
+            if "2" in lattice:
+                self.r = self.gen_dipoles_triangular2(columns, rows)
+            else:
+                self.r = self.gen_dipoles_triangular(columns, rows)
+        elif "s" in lattice.lower():
+            self.r = self.gen_dipoles_square(columns, rows)
+        else:
+            self.r = self.gen_dipoles_1d(columns, rows)
+        self.r *= self.a
+        self.r = np.vstack((self.r, self.r))
+        # print(self.r)
 
         self.p = None
         if p0 is None:
             self.randomize_dipoles()
+            self.p = self.gen_dipoles_aligned()
         else:
             self.p = p0
         self.img_num = 0
         self.accepted = 0
 
-        """Following for fast energy calculation"""
         # duplicate xy values of r into 1 x 2N arrays
         rx = self.r[:, 0].reshape((1, self.N))
         ry = self.r[:, 1].reshape((1, self.N))
@@ -63,42 +73,21 @@ class DipoleSim:
         self.dx = rx.T - rx
         self.dy = ry.T - ry
         self.r_sq = self.dx * self.dx + self.dy * self.dy  # NxN
+        self.r_sq[self.N_layer:, :self.N_layer] += 1  # add interlayer distances
+        self.r_sq[:self.N_layer, self.N_layer:] += 1  # add interlayer distances
         self.r_sq[self.r_sq == 0] = np.inf  # this removes self energy
 
-    def calc_energy_slow(self):
-        energy = 0.
-        for ii in range(self.N):
-            dr = self.r[ii] - self.r
-            r_sq = np.sum(dr * dr, axis=1)
-            r_sq[r_sq == 0] = np.inf
-            pi_dot_p = np.sum(self.p[ii] * self.p, axis=1)
-            pi_dot_r = np.sum(self.p[ii] * dr, axis=1)
-            p_dot_r = np.sum(self.p * dr, axis=1)
-            energy += np.sum(pi_dot_p / r_sq ** 1.5) - 3. * np.sum(pi_dot_r * p_dot_r / r_sq ** 2.5)
-        return energy * 0.5
+    def calc_energy(self):
+        """
 
-    def calc_energy_fast(self):
+        :return:
+        """
         px = self.p[:, 0].reshape((1, self.N))
         py = self.p[:, 1].reshape((1, self.N))
+        # print(px.shape)
 
+        # generate all dipoles dotted with other dipoles
         return calc_energy_fast(px, py, self.dx, self.dy, self.r_sq, self.E)
-
-    def calc_energy_nearest_neighbor(self):
-        energy_int = 0.
-        for ii in range(self.N):
-            pi = self.p[ii]
-            dr = self.r[ii] - self.r  # Nx2
-            r_sq = np.sum(dr * dr, axis=1)  # N
-            r_sq[r_sq == 0] = np.inf
-            neighbor_locations = np.where(r_sq < 1.001)
-            neighbors = self.p[neighbor_locations]
-            dr_neighbors = dr[neighbor_locations]
-
-            pi_dot_p = np.sum(pi * neighbors, axis=1)  # (2) dot (Nx2) -> N
-            pi_dot_dr = np.sum(pi * dr_neighbors, axis=1)  # (2) dot (Nx2) -> N
-            p_dot_dr = np.sum(neighbors * dr_neighbors, axis=1)  # (Nx2) dot (Nx2) -> N
-            energy_int -= np.sum(3 * pi_dot_dr * p_dot_dr - pi_dot_p)
-        return 0.5 * np.sum(energy_int) - np.sum(self.p * self.E)
 
     def trial(self):
         """
@@ -107,46 +96,27 @@ class DipoleSim:
         """
         trial_dipole = self.rng.integers(self.N)
         trial_p = self.orientations[self.rng.integers(self.orientations_num)]
+        if trial_dipole < self.N_layer:
+            trial_dipole *= self.oddness
         if not (self.p[trial_dipole][1] == trial_p[1]):
             dp = trial_p - self.p[trial_dipole]  # 2
             dr = self.r[trial_dipole] - self.r  # Nx2
-            r_sq_n = np.sum(dr * dr, axis=1)  # N
-            r_sq_d = np.copy(r_sq_n)
-            r_sq_d[r_sq_d == 0] = np.inf
+            r_sq = np.sum(dr * dr, axis=1)  # N
+            if trial_dipole < self.N_layer:     # if dipole is in first layer
+                r_sq[self.N_layer:] += 1
+            else:
+                r_sq[:self.N_layer] += 1
+            r_sq[r_sq == 0] = np.inf
             dp_dot_p = np.sum(dp * self.p, axis=1)  # (2) dot (Nx2) -> N
             dp_dot_dr = np.sum(dp * dr, axis=1)  # (2) dot (Nx2) -> N
             p_dot_r = np.sum(self.p * dr, axis=1)  # (Nx2) dot (Nx2) -> N
-            dU_neg = sum(dp * self.E) + np.sum((3 * dp_dot_dr * p_dot_r - dp_dot_p * r_sq_n) / r_sq_d ** 2.5)
+            dU_neg = sum(dp * self.E) + 3 * np.sum(dp_dot_dr * p_dot_r / r_sq ** 2.5) - np.sum(dp_dot_p / r_sq ** 1.5)
 
             if np.log(random.random()) < self.beta * dU_neg:
 
                 self.accepted += 1
                 self.p[trial_dipole] = trial_p
                 # print(dU_neg)
-
-    def step_nearest_neighbor(self):
-        """
-        One step of the Monte Carlo
-        :return:
-        """
-        trial_dipole = self.rng.integers(self.N)
-        trial_p = self.orientations[self.rng.integers(self.orientations_num)]
-        if not (self.p[trial_dipole][0] == trial_p[0]):
-            dp = trial_p - self.p[trial_dipole]  # 2
-            dr = self.r[trial_dipole] - self.r  # Nx2
-            r_sq = np.sum(dr * dr, axis=1)  # N
-            r_sq[r_sq == 0] = np.inf
-            neighbor_locations = np.where(r_sq < 1.001)
-            neighbors = self.p[neighbor_locations]
-            dr_neighbors = dr[neighbor_locations]
-
-            dp_dot_p = np.sum(dp * neighbors, axis=1)  # (2) dot (Nx2) -> N
-            dp_dot_dr = np.sum(dp * dr_neighbors, axis=1)  # (2) dot (Nx2) -> N
-            p_dot_r = np.sum(neighbors * dr_neighbors, axis=1)  # (Nx2) dot (Nx2) -> N
-            dU_neg = sum(dp * self.E) + np.sum(3 * dp_dot_dr * p_dot_r - dp_dot_p)
-            if np.log(random.random()) < self.beta * dU_neg:
-                self.accepted += 1
-                self.p[trial_dipole] = trial_p
 
     def calc_polarization(self) -> np.ndarray:
         """
@@ -168,29 +138,6 @@ class DipoleSim:
         :return: 2-vector of x and y components
         """
         return np.sum(self.p[:, 1]) / self.volume
-
-    def change_temperature(self, temperature: float):
-        """
-        Change the current temperature of the system
-        :param temperature:
-        """
-        self.beta = 1. / temperature
-
-    def change_electric_field(self, x: float = 0., y: float = 0.) -> np.ndarray:
-        """
-        Change the value of the external electric field in units of p^2 / (4 pi eps0 eps a^3)
-        :param x: electric field strength in x direction
-        :param y: electric field strength in y direction
-        """
-        self.E = np.array([x, y])
-        return self.E
-
-    def get_temperature(self):
-        """
-        Get the current temperature
-        :return: current system temperature (kT) in units of p^2 / (4 pi eps0 eps a^3)
-        """
-        return 1. / self.beta
 
     def hysteresis_experiment(self, target_temperature, field_strength, t_start=3, t_step=0.1, pts=25):
         """
@@ -218,6 +165,43 @@ class DipoleSim:
                 p_to_ave[aa] = self.calc_polarization_x()
             polarizations[ii] = np.average(p_to_ave)
         return field, polarizations
+
+    def susceptibility_experiment(self):
+        """
+        Conduct a small field experiement to estimate susceptibility
+        :return:
+        """
+        pass
+
+    def change_temperature(self, temperature: float):
+        """
+        Change the current temperature of the system
+        :param temperature:
+        """
+        self.beta = 1. / temperature
+
+    def change_electric_field(self, x: float = 0., y: float = 0.) -> np.ndarray:
+        """
+        Change the value of the external electric field in units of p^2 / (4 pi eps0 eps a^3)
+        :param x: electric field strength in x direction
+        :param y: electric field strength in y direction
+        """
+        self.E = np.array([x, y])
+        return self.E
+
+    def get_temperature(self):
+        """
+        Get the current temperature
+        :return: current system temperature (kT) in units of p^2 / (4 pi eps0 eps a^3)
+        """
+        return 1. / self.beta
+
+    # @staticmethod
+    # def average(property):
+    #     ave = np.average(property)
+    #     std = np.std(property)
+    #     correlation = (np.average(property * property[0]) - np.average(property) * property[0]) / std ** 2
+    #     correlation_time =
 
     @staticmethod
     def gen_dipoles_triangular(rows: int, columns: int) -> np.ndarray:
@@ -280,26 +264,33 @@ class DipoleSim:
         r[:, 0] = np.arange(rows * columns, dtype=float)
         return r
 
-    def gen_dipole_orientations(self, dipole_num: int) -> tuple[np.ndarray, np.ndarray]:
+    def gen_dipole_orientations(self) -> tuple[np.ndarray, np.ndarray]:
         """
         Initialize dipole directions
         :param dipole_num: number of dipoles
         :return: array of 2-vectors representing dipole strength in x and y directions
         """
         # print(self.orientations_num)
-        ran_choices = self.rng.integers(0, self.orientations_num, size=dipole_num)
+        ran_choices = self.rng.integers(0, self.orientations_num, size=self.N)
         # print(ran_choices)
-        return self.orientations[ran_choices]
+        p = self.orientations[ran_choices]
+        p[self.N_layer:] *= self.oddness
+        return p
+
+    def gen_dipoles_aligned(self):
+        p = self.orientations[np.zeros(self.N, dtype=int)]
+        p[self.N_layer:] *= self.oddness
+        return p
 
     def randomize_dipoles(self):
         """Randomize the orientations of the dipoles"""
         self.accepted = 0
-        self.p = self.gen_dipole_orientations(self.N)
+        self.p = self.gen_dipole_orientations()
 
     def align_dipoles(self):
         """Make all the dipoles point to the right"""
         self.accepted = 0
-        self.p = self.orientations[[0] * self.N]
+        self.p = self.gen_dipoles_aligned()
 
     @staticmethod
     def create_ori_vec(orientations_num):
@@ -350,19 +341,6 @@ class DipoleSim:
         for ii in range(self.N * full_steps):
             self.step_nearest_neighbor()
 
-    def set_lattice(self, lattice, rows, columns):
-        # set the lattice
-        if "t" in lattice.lower():
-            if "2" in lattice:
-                r = self.gen_dipoles_triangular2(rows, columns)
-            else:
-                r = self.gen_dipoles_triangular(rows, columns)
-        elif "s" in lattice.lower():
-            r = self.gen_dipoles_square(rows, columns)
-        else:
-            r = self.gen_dipoles_1d(rows, columns)
-        return r
-
     def test_polarization(self, field_strength, pts=10):
         self.save_img("seed")
         self.run(300)
@@ -393,25 +371,13 @@ class DipoleSim:
 
 
 if __name__ == "__main__":
-    # sim = DipoleSim(1.1, 30, 30, 45, np.array([0, 0]), 0.08789, 0, 1.5)
-    # p = np.loadtxt('dipoles_300K_ferro_5000000.txt')
-    # sim = DipoleSim(1.1, 30, 30, 300, 0.08789, 0, 1.5, p)
-    # sim.change_electric_field(np.array([0, 10]))
-    # sim.save_img()
-    # for ii in range(1):
-    #     for _ in range(5000000):
-    #         # sim.step_internal()
-    #         sim.step()
-    #     sim.save_img()
-    #     print(ii)
-    # np.savetxt('double_layer_odd_17A.txt', sim.p)
-    from time import perf_counter
-
-    sim = DipoleSim(rows=30, columns=30, temp0=5,
-                    orientations_num=3, eps_rel=1.5,
-                    lattice="t")
-    t, u = sim.test_energy()
-    plt.figure(0)
-    plt.plot(t, u)
+    sim = DipoleSim(1, 16, 16, 5, 3, "t", False)
+    f, p = sim.hysteresis_experiment(0.1, 5, t_step=0.05, pts=50)
+    plt.plot(f, p)
+    for ii in range(len(f)):
+        if not ii % 5:
+            plt.arrow(f[ii], p[ii], f[ii+1]-f[ii], p[ii+1]-p[ii], shape='full', lw=0, length_includes_head=True, head_width=.05)
     plt.show()
-
+    # sim.align_dipoles()
+    # print(sim.p)
+    # print(sim.calc_energy())
