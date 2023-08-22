@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pylab as plt
 import random
 import os
-from montecarlo.layers_1.montecarlo import DipoleSim as OneLayerSim
+from ..layers_1.montecarlo import DipoleSim as OneLayerSim
 
 
 class DipoleSim(OneLayerSim):
@@ -26,49 +26,16 @@ class DipoleSim(OneLayerSim):
         else:
             self.oddness = 1
 
-        self.N_layer = columns * rows
-        self.N = self.N_layer * 2
-        self.volume = self.N_layer * a_over_c * a_over_c
+        self.N_layer = self.N
+        self.N *= 2
+        self.volume *= a_over_c * a_over_c
 
         self.a = a_over_c  # a in units of c
 
-        self.orientations_num = orientations_num    # number of possible directions
-        self.orientations = self.create_ori_vec(orientations_num)       # the vectors for each direction
-
-        # set the lattice
-        if "t" in lattice.lower():
-            self.volume *= 0.5 * np.sqrt(3)
-            if "2" in lattice:
-                self.r = self.gen_dipoles_triangular2(columns, rows)
-            else:
-                self.r = self.gen_dipoles_triangular(columns, rows)
-        elif "s" in lattice.lower():
-            self.r = self.gen_dipoles_square(columns, rows)
-        else:
-            self.r = self.gen_dipoles_1d(columns, rows)
-
-        # print(self.r)
-
-        self.p = None
-        if p0 is None:
-            self.randomize_dipoles()
-            self.p = self.gen_dipoles_aligned()
-        else:
-            self.p = p0
-        self.img_num = 0
-        self.accepted = 0
-
-        # duplicate xy values of r into 1 x 2N arrays
-        rx = self.r[:, 0].reshape((1, self.N))
-        ry = self.r[:, 1].reshape((1, self.N))
-
-        # generate all distances between dipoles
-        self.dx = rx.T - rx
-        self.dy = ry.T - ry
-        self.r_sq = self.dx * self.dx + self.dy * self.dy  # NxN
+    def precalculations_for_energy(self):
+        OneLayerSim.precalculations_for_energy(self)
         self.r_sq[self.N_layer:, :self.N_layer] += 1  # add interlayer distances
         self.r_sq[:self.N_layer, self.N_layer:] += 1  # add interlayer distances
-        self.r_sq[self.r_sq == 0] = np.inf  # this removes self energy
 
     def set_lattice(self, lattice, rows, columns):
         r = OneLayerSim.set_lattice(self, lattice, rows, columns)
@@ -114,7 +81,7 @@ class DipoleSim(OneLayerSim):
 
 
 if __name__ == "__main__":
-    sim = DipoleSim(1, 16, 16, 5, 3, "t", False)
+    sim = DipoleSim(1, 1, 1, 5, 3, "t", False)
     f, p = sim.hysteresis_experiment(0.1, 5, t_step=0.05, pts=50)
     plt.plot(f, p)
     for ii in range(len(f)):
