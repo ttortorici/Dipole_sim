@@ -156,6 +156,21 @@ class DipoleSim:
         """
         return normalized_sum(self.p[:, 1], self.volume)
 
+    def calc_susceptibility(self):
+        field_strength = 0.05
+        mc_steps = 10
+        p = self.p
+        self.change_electric_field(x=field_strength)
+        self.run(mc_steps)
+        upper_p = self.calc_polarization_x()
+        self.p = p
+        self.change_electric_field(x=-field_strength)
+        self.run(mc_steps)
+        lower_p = self.calc_polarization_x()
+        self.p = p
+        return (upper_p - lower_p) / (2 * field_strength)
+
+
     def change_temperature(self, temperature: float):
         """
         Change the current temperature of the system
@@ -185,7 +200,8 @@ class DipoleSim:
         :return:
         """
         self.slow_cool(target_temperature, t_step, 50)
-        self.save_img()
+        print(f"At target temperature of kT={target_temperature}")
+        # self.save_img()
 
         partial_field = np.linspace(0, field_strength, pts)
         field = np.hstack((partial_field, partial_field[:-1][::-1],
@@ -193,7 +209,9 @@ class DipoleSim:
                            partial_field[1:], partial_field[:-1][::-1]))
         polarizations = np.empty(len(field))
         to_ave = 10
+        print(f"will need to do {len(field)} points")
         for ii, f in enumerate(field):
+            print(ii)
             p_to_ave = np.empty(to_ave)
             self.change_electric_field(x=f)
             self.run(50)
@@ -201,11 +219,12 @@ class DipoleSim:
                 self.run(steps=10)
                 p_to_ave[aa] = self.calc_polarization_x()
             polarizations[ii] = np.average(p_to_ave)
-        plt.plot(f, p)
-        plt.plot(f[0], p[0], "o")
-        for ii in range(len(f)):
+        plt.plot(field, polarizations)
+        plt.plot(field[0], polarizations[0], "o")
+        for ii in range(len(field)):
             if not ii % 5:
-                plt.arrow(f[ii], p[ii], f[ii + 1] - f[ii], p[ii + 1] - p[ii], shape='full', lw=0,
+                plt.arrow(field[ii], polarizations[ii], field[ii + 1] - field[ii],
+                          polarizations[ii + 1] - polarizations[ii], shape='full', lw=0,
                           length_includes_head=True,
                           head_width=.05)
         plt.show()
@@ -432,9 +451,11 @@ class DipoleSim:
 
 
 if __name__ == "__main__":
-    size = 64
+    size = 32
     sim = DipoleSim(size, size, 5, 3, "t")
+    print("simulation made")
     # sim.test_cooldown(0.1, 3, 50)
-    f, p = sim.hysteresis_experiment(0.1, 5, t_step=0.05, pts=25)
-
-
+    # f, p = sim.hysteresis_experiment(target_temperature=5, field_strength=5, t_step=0.05, pts=25)
+    for _ in range(10):
+        chi = sim.calc_susceptibility()
+        print(chi)
