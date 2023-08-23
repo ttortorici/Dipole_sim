@@ -1,11 +1,8 @@
 import numpy as np
-import matplotlib.pylab as plt
-import random
 from one_layer import DipoleSim as OneLayerSim
 
 
 class DipoleSim(OneLayerSim):
-
     def __init__(self, a_over_c: float, rows: int, columns: int, temp0: float,
                  orientations_num: int = 3, lattice: str = "t", oddness=False, p0=None):
         """
@@ -30,6 +27,9 @@ class DipoleSim(OneLayerSim):
 
         self.volume *= a_over_c * a_over_c
 
+        self.rotation_mat = np.array([[np.cos(np.pi / ), -np.sin(np.pi / )],
+                                      [np.sin(np.pi / ), np.cos(np.pi / )]])
+
     def precalculations_for_energy(self):
         self.N_layer = self.N
         self.N *= 2
@@ -49,15 +49,16 @@ class DipoleSim(OneLayerSim):
         :return:
         """
         index = self.rng.integers(self.N)
-        dipole = self.orientations[self.rng.integers(self.orientations_num)]
+        dipole =
         if index < self.N_layer:
             dipole *= self.oddness
         return index, dipole
 
 
 if __name__ == "__main__":
-    sim = DipoleSim(1, 32, 32, 5, 3, "t", True)
-    f, p = sim.hysteresis_experiment(0.1, 5, t_step=0.05, pts=50)
+    sim = DipoleSim(1, 16, 16, 5, 3, "t", True)
+    f, p = sim.hysteresis_experiment(0.1, 5, mc_steps=500,
+                                     t_step=0.05, pts=25, mc_cool_steps=5)
 
     # sim.align_dipoles()
     # print(sim.p)

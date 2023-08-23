@@ -3,6 +3,7 @@ import matplotlib.pylab as plt
 import random
 import os
 from numba import njit, float64
+import itertools
 
 
 @njit(float64(float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:, :], float64[:]),
@@ -20,6 +21,11 @@ def calc_energy_fast(px, py, dx, dy, r_sq, field):
 @njit(float64(float64[:], float64), fastmath=True)
 def normalized_sum(vector, divisor):
     return np.sum(vector) / divisor
+
+
+@njit(float64[:](float64[:, :]), fastmath=True)
+def sum_of_vectors(vectors):
+    return np.sum(vectors, axis=0)
 
 
 @njit(float64(float64[:], float64[:, :], float64[:, :], float64[:], float64[:]), fastmath=True)
@@ -42,6 +48,7 @@ class DipoleSim:
         :param p0: None for a random "hot" initial condition, or give a specific vector of p values (Nx2) matrix
         """
         self.rng = np.random.default_rng()
+        self.a = 1.
 
         # set units
         self.beta = 1. / temp0
@@ -51,6 +58,7 @@ class DipoleSim:
         self.orientations = self.create_ori_vec(orientations_num)       # the vectors for each direction
 
         self.r = self.set_lattice(lattice, rows, columns)
+        self.r_center, self.r_tile1, self.r_tile2 = self.tiling_parameters(rows, columns, lattice)
 
         self.N = columns * rows
         self.volume = self.N
@@ -68,6 +76,24 @@ class DipoleSim:
         self.r_sq = np.empty((0, 0), dtype=float)
         self.precalculations_for_energy()
         self.r_sq[self.r_sq == 0] = np.inf
+
+    def tiling_parameters(self, rows, columns, lattice):
+        if "t" in lattice:
+            if "2" in lattice:
+                r_center = np.array([0.5 * columns, np.sqrt(3) * 0.25 * rows])
+                r_2 = np.array([0.5 * columns, 0.5 * np.sqrt(3) * rows]) * self.a
+            else:
+                r_center = np.array([0.75 * columns, np.sqrt(3) * 0.25 * rows])
+                r_2 = np.array([0., self.a * rows * np.sqrt(3) * 0.5])
+        elif "s" in lattice:
+            r_center = np.array([0.5 * columns, 0.5 * rows])
+            r_2 = np.array([0., self.a * rows])
+        else:
+            r_center = np.array([0.5, 0.])
+            r_2 = None
+        r_center *= self.a
+        r_1 = np.array([self.a * columns, 0.])
+        return r_center, r_1, r_2
 
     def precalculations_for_energy(self):
         """
@@ -120,8 +146,6 @@ class DipoleSim:
         """
         One trial of the Monte Carlo
         """
-        # trial_dipole = self.rng.integers(self.N)
-        # trial_p = self.orientations[self.rng.integers(self.orientations_num)]
         trial_dipole, trial_p = self.select_trial_dipole()
         if not (self.p[trial_dipole][1] == trial_p[1]):
             dp = trial_p - self.p[trial_dipole]  # 2
@@ -130,6 +154,29 @@ class DipoleSim:
             r_sq[r_sq == 0] = np.inf
 
             du_neg = trial_calc(dp, self.p, dr, r_sq, self.field)
+
+            if np.log(random.random()) < self.beta * du_neg:
+                self.accepted += 1
+                self.p[trial_dipole] = trial_p
+
+    def trial_periodic_bc(self, tiles=1):
+        """
+        One trial of the Monte Carlo
+        """
+        trial_dipole, trial_p = self.select_trial_dipole()
+        if not (self.p[trial_dipole][1] == trial_p[1]):
+            dp = trial_p - self.p[trial_dipole]  # 2
+            p_total = sum_of_vectors(self.p) + dp
+            dr = self.r[trial_dipole] - self.r  # Nx2
+            r_sq = np.sum(dr * dr, axis=1)  # N
+            r_sq[r_sq == 0] = np.inf
+
+            du_neg = trial_calc(dp, self.p, dr, r_sq, self.field)
+            for ii, jj in itertools.product(*[range(-tiles, tiles + 1)] * 2):
+                if ii or jj:
+                    dr = self.r[trial_dipole] - (self.r_center + ii * self.r_tile1 + jj * self.r_tile2)
+                    r_sq = sum(dr * dr)
+                    du_neg += 3 * sum(dp * dr) * sum(p_total * dr) / r_sq ** 2.5 - sum(dp * p_total) / r_sq ** 1.5
 
             if np.log(random.random()) < self.beta * du_neg:
                 self.accepted += 1
@@ -156,20 +203,13 @@ class DipoleSim:
         """
         return normalized_sum(self.p[:, 1], self.volume)
 
-    def calc_susceptibility(self):
-        field_strength = 0.05
-        mc_steps = 10
+    def calc_susceptibility(self, field_strength, mc_steps=10):
         p = self.p
         self.change_electric_field(x=field_strength)
         self.run(mc_steps)
-        upper_p = self.calc_polarization_x()
+        polarization = self.calc_polarization_x()
         self.p = p
-        self.change_electric_field(x=-field_strength)
-        self.run(mc_steps)
-        lower_p = self.calc_polarization_x()
-        self.p = p
-        return (upper_p - lower_p) / (2 * field_strength)
-
+        return polarization / field_strength
 
     def change_temperature(self, temperature: float):
         """
@@ -194,12 +234,14 @@ class DipoleSim:
         """
         return 1. / self.beta
 
-    def hysteresis_experiment(self, target_temperature, field_strength, t_step=0.1, pts=25):
+    def hysteresis_experiment(self, target_temperature, field_strength, mc_steps=50,
+                              t_step=0.1, pts=25, mc_cool_steps=10):
         """
         Conduct a hysteresis experiment
         :return:
         """
-        self.slow_cool(target_temperature, t_step, 50)
+        print("Starting cooldown")
+        self.slow_cool(target_temperature, t_step, mc_cool_steps)
         print(f"At target temperature of kT={target_temperature}")
         # self.save_img()
 
@@ -214,10 +256,12 @@ class DipoleSim:
             print(ii)
             p_to_ave = np.empty(to_ave)
             self.change_electric_field(x=f)
-            self.run(50)
+            self.run(mc_steps)
             for aa in range(to_ave):
                 self.run(steps=10)
                 p_to_ave[aa] = self.calc_polarization_x()
+            if abs(f) == field_strength:
+                self.save_img(f"f = {f}")
             polarizations[ii] = np.average(p_to_ave)
         plt.plot(field, polarizations)
         plt.plot(field[0], polarizations[0], "o")
@@ -237,7 +281,7 @@ class DipoleSim:
         """
         
 
-    def slow_cool(self, target_temperature, temperature_step_size=0.05, mc_steps=20):
+    def slow_cool(self, target_temperature, temperature_step_size=0.05, mc_steps=10):
         """
         Reach a temperature without quenching.
         :param target_temperature: kT to cool down to.
@@ -247,6 +291,7 @@ class DipoleSim:
         self.randomize_dipoles()
         temperatures = np.arange(5, target_temperature - temperature_step_size, -temperature_step_size)
         for ii, t in enumerate(temperatures):
+            print(f"kT = {t}")
             self.change_temperature(t)
             self.run(steps=mc_steps)
 
@@ -377,6 +422,10 @@ class DipoleSim:
         for ii in range(self.N * steps):
             self.trial()
 
+    def run_pbc(self, steps):
+        for ii in range(self.N * steps):
+            self.trial_periodic_bc()
+
     def run_nearest_neighbor(self, full_steps):
         for ii in range(self.N * full_steps):
             self.step_nearest_neighbor()
@@ -395,6 +444,33 @@ class DipoleSim:
         return r
 
     def test_cooldown(self, target_temperature, start_temperature, pts):
+        temperatures = np.linspace(start_temperature, target_temperature, pts)
+        energies = np.empty(pts)
+        polarizations = np.empty(pts)
+        to_ave = 10
+        for ii, t in enumerate(temperatures):
+            self.change_temperature(t)
+            energies_to_ave = np.empty(to_ave)
+            polarizations_to_ave = np.empty(to_ave)
+            print(f"ii = {ii:03}; kT = {t}")
+            self.run(50)
+            if ii == pts - 1 or not ii % 10:
+                self.save_img(f"kT={t}".replace(".", "_"))
+            for aa in range(to_ave):
+                self.run(steps=10)
+                energies_to_ave[aa] = self.calc_energy_fast()
+                polarizations_to_ave[aa] = self.calc_polarization()
+            polarizations[ii] = np.average(polarizations_to_ave)
+            energies[ii] = np.average(energies_to_ave)
+        plt.figure()
+        plt.plot(temperatures, energies)
+        plt.title("Energy v kT")
+        plt.figure()
+        plt.plot(temperatures, polarizations)
+        plt.title("Polarization v kT")
+        plt.show()
+
+    def test_cooldown2(self, target_temperature, start_temperature, pts):
         temperatures = np.linspace(start_temperature, target_temperature, pts)
         energies = np.empty(pts)
         polarizations = np.empty(pts)
@@ -454,8 +530,29 @@ if __name__ == "__main__":
     size = 32
     sim = DipoleSim(size, size, 5, 3, "t")
     print("simulation made")
-    # sim.test_cooldown(0.1, 3, 50)
-    # f, p = sim.hysteresis_experiment(target_temperature=5, field_strength=5, t_step=0.05, pts=25)
-    for _ in range(10):
-        chi = sim.calc_susceptibility()
-        print(chi)
+    sim.test_cooldown(0.1, 3, 50)
+    sim.save_img("BC1")
+    sim.test_cooldown2(0.1, 3, 50)
+    sim.save_img("BC2")
+    # f, p = sim.hysteresis_experiment(0.1, 5, mc_steps=100,
+    #                                  t_step=0.05, pts=25, mc_cool_steps=5)
+    # to_ave = 25
+    # chis = np.empty(to_ave)
+    # for ii in range(to_ave):
+    #     chis[ii] = sim.calc_susceptibility(field_strength=.5, mc_steps=10)
+    # print("average = " + str(np.average(chis)))
+    # for ii in range(to_ave):
+    #     chis[ii] = sim.calc_susceptibility(field_strength=1, mc_steps=10)
+    # print("average = " + str(np.average(chis)))
+
+    # 10 pts
+    # 0.25:  0.1492187499999998   0.1521484374999998   0.20429687499999982
+    # 0.5 :  0.16162109374999994  0.15927734374999997  0.14902343749999994
+    # 1   :  0.189501953125       0.16767578125        0.171337890625
+
+    # 50 pts
+    # 0.25:  0.17617187499999978  0.1424218749999998   0.14722656249999982
+    # 0.5 :  0.16929687499999993  0.16964843749999992  0.17955078124999993
+    # 1   :  0.166298828125       0.1704296875         0.179541015625
+
+
