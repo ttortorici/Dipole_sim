@@ -27,9 +27,6 @@ class DipoleSim(OneLayerSim):
 
         self.volume *= a_over_c * a_over_c
 
-        self.rotation_mat = np.array([[np.cos(np.pi / ), -np.sin(np.pi / )],
-                                      [np.sin(np.pi / ), np.cos(np.pi / )]])
-
     def precalculations_for_energy(self):
         self.N_layer = self.N
         self.N *= 2
@@ -49,7 +46,7 @@ class DipoleSim(OneLayerSim):
         :return:
         """
         index = self.rng.integers(self.N)
-        dipole =
+        dipole = self.orientations[self.rng.integers(self.orientations_num)]
         if index < self.N_layer:
             dipole *= self.oddness
         return index, dipole

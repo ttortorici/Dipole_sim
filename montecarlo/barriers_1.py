@@ -1,8 +1,9 @@
 import numpy as np
-from one_layer import DipoleSim as OneLayerSim
+import random
+import one_layer
 
 
-class DipoleSim(OneLayerSim):
+class DipoleSim(one_layer.DipoleSim):
     def __init__(self, barrier_height: float, rows: int, columns: int, temp0: float,
                  orientations_num: int = 3, lattice: str = "t", p0=None):
         """
@@ -15,7 +16,8 @@ class DipoleSim(OneLayerSim):
         :param lattice: type of lattice. t for triangular in a rhombus, t2 for triangular in a square, and s for square.
         :param p0: None for a random "hot" initial condition, or give a specific vector of p values (Nx2) matrix
         """
-        OneLayerSim.__init__(self, rows, columns, temp0, orientations_num * 2, lattice, p0)
+        one_layer.DipoleSim.__init__(self, rows, columns, temp0, orientations_num * 2, lattice, p0)
+        self.barrier = -barrier_height
 
     def select_trial_dipole(self):
         """
@@ -23,22 +25,34 @@ class DipoleSim(OneLayerSim):
         :return: [index of selected dipole], [new dipole moment vector]
         """
         index = self.rng.integers(self.N)
-        dipole = self.orientations[self.rng.integers(self.orientations_num)]
-        return index, dipole
+        new_p_ori_ind = self.p_ori_ind[index] + np.random.choice((1, -1))
+        dipole = self.p[index]
+        return index, dipole, new_p_ori_ind
 
     def trial(self):
         """
         One trial of the Monte Carlo
         """
-        trial_dipole, trial_p = self.select_trial_dipole()
-        if not (self.p[trial_dipole][1] == trial_p[1]):
-            dp = trial_p - self.p[trial_dipole]  # 2
-            dr = self.r[trial_dipole] - self.r  # Nx2
-            r_sq = np.sum(dr * dr, axis=1)  # N
-            r_sq[r_sq == 0] = np.inf
+        trial_dipole, trial_p, trial_p_ori_ind = self.select_trial_dipole()
 
-            du_neg = trial_calc(dp, self.p, dr, r_sq, self.field)
-
-            if np.log(random.random()) < self.beta * du_neg:
+        # if odd then going into high barrier orientation
+        if trial_p_ori_ind & 1:
+            if np.log(random.random()) < self.beta * self.barrier:
                 self.accepted += 1
                 self.p[trial_dipole] = trial_p
+
+        # if even then going into low barrier orientation
+        else:
+            success = self.calc_trial(trial_p, trial_dipole)
+            if success:
+                self.p_ori_ind[trial_dipole] = trial_p_ori_ind
+
+
+if __name__ == "__main__":
+    size = 32
+    barrier = 1
+    sim = DipoleSim(barrier, size, size, 5, 3, "t")
+    print("simulation made")
+    sim.save_img(f"initial")
+    sim.test_cooldown(0.1, 3, 50)
+    sim.save_img(f"barrier = {barrier}")

@@ -64,6 +64,7 @@ class DipoleSim:
         self.volume = self.N
 
         self.p = None
+        self.p_ori_ind = None
         if p0 is None:
             self.randomize_dipoles()
         else:
@@ -148,16 +149,22 @@ class DipoleSim:
         """
         trial_dipole, trial_p = self.select_trial_dipole()
         if not (self.p[trial_dipole][1] == trial_p[1]):
-            dp = trial_p - self.p[trial_dipole]  # 2
-            dr = self.r[trial_dipole] - self.r  # Nx2
-            r_sq = np.sum(dr * dr, axis=1)  # N
-            r_sq[r_sq == 0] = np.inf
+            self.calc_trial(trial_p, trial_dipole)
 
-            du_neg = trial_calc(dp, self.p, dr, r_sq, self.field)
+    def calc_trial(self, trial_p, trial_dipole):
+        dp = trial_p - self.p[trial_dipole]  # 2
+        dr = self.r[trial_dipole] - self.r  # Nx2
+        r_sq = np.sum(dr * dr, axis=1)  # N
+        r_sq[r_sq == 0] = np.inf
 
-            if np.log(random.random()) < self.beta * du_neg:
-                self.accepted += 1
-                self.p[trial_dipole] = trial_p
+        du_neg = trial_calc(dp, self.p, dr, r_sq, self.field)
+
+        if np.log(random.random()) < self.beta * du_neg:
+            self.accepted += 1
+            self.p[trial_dipole] = trial_p
+            return True
+        else:
+            return False
 
     def trial_periodic_bc(self, tiles=1):
         """
@@ -365,12 +372,12 @@ class DipoleSim:
         # print(self.orientations_num)
         ran_choices = self.rng.integers(0, self.orientations_num, size=dipole_num)
         # print(ran_choices)
-        return self.orientations[ran_choices]
+        return self.orientations[ran_choices], ran_choices
 
     def randomize_dipoles(self):
         """Randomize the orientations of the dipoles"""
         self.accepted = 0
-        self.p = self.gen_dipole_orientations(self.N)
+        self.p, self.p_ori_ind = self.gen_dipole_orientations(self.N)
 
     def align_dipoles(self):
         """Make all the dipoles point to the right"""
@@ -385,9 +392,9 @@ class DipoleSim:
         :return: array of 2-long basis vectors
         """
         del_theta = 2 * np.pi / orientations_num
-        orientations = np.zeros((orientations_num, 2))
-        for e in range(orientations_num):
-            orientations[e] = np.array([np.cos(del_theta * e), np.sin(del_theta * e)])
+        angles = np.arange(orientations_num, dtype=float).reshape((orientations_num, 1)) * del_theta
+        orientations = np.hstack((np.cos(angles), np.sin(angles)))
+        orientations[abs(orientations) < 1e-14] = 0
         return orientations
 
     def save_img(self, name=None):
@@ -405,7 +412,7 @@ class DipoleSim:
                         bbox_inches=None, pad_inches=0, facecolor='auto', edgecolor=None)
         else:
             plt.savefig(f"plots{os.sep}{name}.png", dpi=1000, format=None, metadata=None,
-                            bbox_inches=None, pad_inches=0, facecolor='auto', edgecolor=None)
+                        bbox_inches=None, pad_inches=0, facecolor='auto', edgecolor=None)
         plt.close()
         self.img_num += 1
 
