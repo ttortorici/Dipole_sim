@@ -203,6 +203,17 @@ class DipoleSim:
         """
         return normalized_sum(self.p[:, 0], self.volume)
 
+    def calc_polarization_x_ave(self, aves=10, mc_steps=10) -> np.ndarray:
+        """
+        Calculate net dipole moment of the system
+        :return: 2-vector of x and y components
+        """
+        polarizations_to_ave = np.empty(aves)
+        for a in range(aves):
+            self.run(mc_steps)
+            polarizations_to_ave[a] = self.calc_polarization_x()
+        return np.average(polarizations_to_ave)
+
     def calc_polarization_y(self) -> np.ndarray:
         """
         Calculate net dipole moment of the system
@@ -212,27 +223,27 @@ class DipoleSim:
 
     def calc_susceptibility(self, field_strength, mc_steps=10, aves=10):
         p = self.p
+        polarization_o = self.calc_polarization_x_ave(aves, mc_steps)
         self.change_electric_field(x=field_strength)
-        polarizations_to_ave = np.empty(aves)
-        for a in range(aves):
-            self.run(mc_steps)
-            polarizations_to_ave[a] = self.calc_polarization_x()
-            self.p = p
+        polarization_f = self.calc_polarization_x_ave(aves, mc_steps)
+        self.p = p
         self.change_electric_field(x=0)
-        return np.average(polarizations_to_ave) / field_strength
+        return (polarization_f - polarization_o) / field_strength
 
-    def susceptibility_cool_down(self, cold_t, hot_t, t_pts):
-        temperatures = np.linspace(hot_t, cold_t, t_pts)
+    def susceptibility_cool_down(self, cold_t_order, hot_t_order, t_pts):
+        # temperatures = np.linspace(hot_t, cold_t, t_pts)
+        temperatures = np.logspace(hot_t_order, cold_t_order, t_pts)
         chis = np.empty(t_pts)
         aves = 10
         for ii, t in enumerate(temperatures):
             self.change_temperature(t)
             chi_to_ave = np.empty(aves)
             for a in range(aves):
-                chi_to_ave[a] = self.calc_susceptibility(.2, 10)
+                chi_to_ave[a] = self.calc_susceptibility(.05, 10)
             chis[ii] = np.average(chi_to_ave)
         plt.figure()
         plt.plot(temperatures, chis)
+        plt.xlim([0, 1])
         return temperatures, chis
 
     def change_temperature(self, temperature: float):

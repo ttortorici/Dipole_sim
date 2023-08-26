@@ -58,7 +58,7 @@ if __name__ == "__main__":
     a = 1.
     size = 1
     sim = DipoleSim(a, size, size, 5, 3, "t", False)
-    sim.susceptibility_cool_down(5, 0.01, 20)
+    sim.susceptibility_cool_down(-60, 2, 1000)
     plt.show()
     # f, p = sim.hysteresis_experiment(0.1, 5, mc_steps=500,
     #                                  t_step=0.05, pts=25, mc_cool_steps=5)
