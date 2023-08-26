@@ -53,9 +53,15 @@ class DipoleSim(OneLayerSim):
 
 
 if __name__ == "__main__":
-    sim = DipoleSim(1, 16, 16, 5, 3, "t", True)
-    f, p = sim.hysteresis_experiment(0.1, 5, mc_steps=500,
-                                     t_step=0.05, pts=25, mc_cool_steps=5)
+    import matplotlib.pylab as plt
+
+    a = 1.
+    size = 1
+    sim = DipoleSim(a, size, size, 5, 3, "t", False)
+    sim.susceptibility_cool_down(5, 0.01, 20)
+    plt.show()
+    # f, p = sim.hysteresis_experiment(0.1, 5, mc_steps=500,
+    #                                  t_step=0.05, pts=25, mc_cool_steps=5)
 
     # sim.align_dipoles()
     # print(sim.p)

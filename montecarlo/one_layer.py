@@ -63,6 +63,12 @@ class DipoleSim:
         self.N = columns * rows
         self.volume = self.N
 
+        self.dx = np.empty((0, 0), dtype=float)
+        self.dy = np.empty((0, 0), dtype=float)
+        self.r_sq = np.empty((0, 0), dtype=float)
+        self.precalculations_for_energy()
+        self.r_sq[self.r_sq == 0] = np.inf
+
         self.p = None
         self.p_ori_ind = None
         if p0 is None:
@@ -71,12 +77,6 @@ class DipoleSim:
             self.p = p0
         self.img_num = 0
         self.accepted = 0
-
-        self.dx = np.empty((0, 0), dtype=float)
-        self.dy = np.empty((0, 0), dtype=float)
-        self.r_sq = np.empty((0, 0), dtype=float)
-        self.precalculations_for_energy()
-        self.r_sq[self.r_sq == 0] = np.inf
 
     def tiling_parameters(self, rows, columns, lattice):
         if "t" in lattice:
@@ -210,13 +210,30 @@ class DipoleSim:
         """
         return normalized_sum(self.p[:, 1], self.volume)
 
-    def calc_susceptibility(self, field_strength, mc_steps=10):
+    def calc_susceptibility(self, field_strength, mc_steps=10, aves=10):
         p = self.p
         self.change_electric_field(x=field_strength)
-        self.run(mc_steps)
-        polarization = self.calc_polarization_x()
-        self.p = p
-        return polarization / field_strength
+        polarizations_to_ave = np.empty(aves)
+        for a in range(aves):
+            self.run(mc_steps)
+            polarizations_to_ave[a] = self.calc_polarization_x()
+            self.p = p
+        self.change_electric_field(x=0)
+        return np.average(polarizations_to_ave) / field_strength
+
+    def susceptibility_cool_down(self, cold_t, hot_t, t_pts):
+        temperatures = np.linspace(hot_t, cold_t, t_pts)
+        chis = np.empty(t_pts)
+        aves = 10
+        for ii, t in enumerate(temperatures):
+            self.change_temperature(t)
+            chi_to_ave = np.empty(aves)
+            for a in range(aves):
+                chi_to_ave[a] = self.calc_susceptibility(.2, 10)
+            chis[ii] = np.average(chi_to_ave)
+        plt.figure()
+        plt.plot(temperatures, chis)
+        return temperatures, chis
 
     def change_temperature(self, temperature: float):
         """
@@ -363,21 +380,23 @@ class DipoleSim:
         r[:, 0] = np.arange(rows * columns, dtype=float)
         return r
 
-    def gen_dipole_orientations(self, dipole_num: int) -> tuple[np.ndarray, np.ndarray]:
+    def gen_dipole_orientations(self) -> tuple[np.ndarray, np.ndarray]:
         """
         Initialize dipole directions
         :param dipole_num: number of dipoles
         :return: array of 2-vectors representing dipole strength in x and y directions
         """
-        # print(self.orientations_num)
-        ran_choices = self.rng.integers(0, self.orientations_num, size=dipole_num)
-        # print(ran_choices)
+        print(self.orientations_num)
+        ran_choices = self.rng.integers(0, self.orientations_num, size=self.N)
+        print(ran_choices)
+        print(self.orientations[ran_choices])
         return self.orientations[ran_choices], ran_choices
 
     def randomize_dipoles(self):
         """Randomize the orientations of the dipoles"""
         self.accepted = 0
-        self.p, self.p_ori_ind = self.gen_dipole_orientations(self.N)
+        self.p, self.p_ori_ind = self.gen_dipole_orientations()
+        print(self.p)
 
     def align_dipoles(self):
         """Make all the dipoles point to the right"""
